@@ -1,6 +1,9 @@
 # Flask REST API
 flask>=3.0.0
 
+# Cross-Origin Resource Sharing — origins configured via CORS_ORIGINS env var
+flask-cors>=4.0.0
+
 # Firebase Admin SDK (auth + firestore + storage); already in database/requirements.txt
 # but listed here for completeness if installing this layer independently.
 firebase-admin>=6.2.0

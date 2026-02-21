@@ -34,6 +34,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="camera"
+        options={{
+          title: 'Camera',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="camera-alt" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="liveDashboard"
         options={{
           title: 'Live View',

@@ -12,6 +12,19 @@ Endpoints:
     POST   /hazards/<id>/dismiss        — mark a hazard dismissed (driver said "no")
     POST   /hazards/<id>/report         — submit a formal city report (encrypts PII)
     GET    /sessions/<id>/hazards       — hazards for a session (asc by time)
+
+POST /hazards accepts the mobile-app payload schema:
+    {
+        "session_id":   "abc123",
+        "confidence":   0.85,
+        "labels":       ["pothole"],          (list of YOLO class names)
+        "bboxes":       [{"x1":0.1,...}],     (normalised [0,1] bounding boxes)
+        "frame_number": 0,                    (optional)
+        "photo_url":    "https://...",        (optional)
+        "location":     {"lat":38.6,"lng":-90.2},  (optional)
+        "status":       "pending"             (optional, default "pending")
+    }
+    event_type is derived automatically as labels[0].
 """
 
 from flask import Blueprint, g, jsonify, request
@@ -40,23 +53,32 @@ hazards_bp = Blueprint("hazards", __name__)
 def create_hazard():
     """
     Record a new hazard and atomically increment its parent session's count.
-
-    Body (JSON):
-    {
-        "session_id":  "abc123",
-        "event_type":  "pothole",
-        "confidence":  0.85,
-        "photo_url":   "https://storage.googleapis.com/...",  (optional)
-        "location":    {"lat": 38.627, "lng": -90.199},       (optional)
-        "status":      "pending"                              (optional, default "pending")
-    }
     """
     data = request.get_json(silent=True) or {}
 
-    required = ("session_id", "event_type", "confidence")
+    required = ("session_id", "confidence", "labels")
     missing = [k for k in required if k not in data]
     if missing:
         return jsonify({"error": f"Missing required fields: {missing}"}), 400
+
+    # Validate confidence is a number in [0.0, 1.0].
+    try:
+        confidence = float(data["confidence"])
+    except (TypeError, ValueError):
+        return jsonify({"error": "confidence must be a number"}), 400
+    if not (0.0 <= confidence <= 1.0):
+        return jsonify({"error": "confidence must be between 0.0 and 1.0"}), 400
+
+    # Validate labels is a non-empty list of strings.
+    labels = data["labels"]
+    if not isinstance(labels, list) or len(labels) == 0:
+        return jsonify({"error": "labels must be a non-empty list"}), 400
+
+    # Validate status, if provided.
+    status = data.get("status", "pending")
+    valid_statuses = {"pending", "reported", "dismissed"}
+    if status not in valid_statuses:
+        return jsonify({"error": f"status must be one of {sorted(valid_statuses)}"}), 400
 
     session_id = data["session_id"]
     if get_session(session_id) is None:
@@ -64,11 +86,14 @@ def create_hazard():
 
     hazard = Hazard(
         session_id=session_id,
-        event_type=data["event_type"],
-        confidence=float(data["confidence"]),
+        confidence=confidence,
+        labels=labels,
+        bboxes=data.get("bboxes", []),
+        frame_number=int(data.get("frame_number", 0)),
+        event_type=data.get("event_type", ""),  # derived from labels[0] in __post_init__
         photo_url=data.get("photo_url"),
         location=data.get("location"),
-        status=data.get("status", "pending"),
+        status=status,
     )
 
     hazard_id = save_hazard(hazard)
@@ -195,6 +220,9 @@ def _hazard_to_json(hazard) -> dict:
         "session_id": hazard.session_id,
         "event_type": hazard.event_type,
         "confidence": hazard.confidence,
+        "labels": hazard.labels,
+        "bboxes": hazard.bboxes,
+        "frame_number": hazard.frame_number,
         "timestamp": hazard.timestamp.isoformat() if hazard.timestamp else None,
         "photo_url": hazard.photo_url,
         "location": hazard.location,

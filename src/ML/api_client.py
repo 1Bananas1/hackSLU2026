@@ -135,6 +135,7 @@ class HazardApiClient:
         session_id: str,
         event_type: str,
         confidence: float,
+        labels: Optional[list] = None,
         photo_url: Optional[str] = None,
         location: Optional[dict] = None,
     ) -> Optional[str]:
@@ -145,12 +146,14 @@ class HazardApiClient:
             session_id  : Active session ID returned by create_session().
             event_type  : Hazard type string, e.g. "pothole".
             confidence  : Float 0.0-1.0 from the ML sliding window.
+            labels      : List of detected class names (defaults to [event_type]).
             photo_url   : Optional Firebase Storage URL for the frame snapshot.
             location    : Optional dict {"lat": float, "lng": float}.
         """
         body = {
             "session_id": session_id,
             "event_type": event_type,
+            "labels": labels if labels is not None else [event_type],
             "confidence": round(confidence, 4),
         }
         if photo_url:

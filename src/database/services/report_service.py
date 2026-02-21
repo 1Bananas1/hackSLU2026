@@ -68,10 +68,11 @@ def get_report(report_id: str) -> Optional[Report]:
 
 def get_reports_by_hazard(hazard_id: str) -> List[Report]:
     """Return all reports linked to a hazard, newest first."""
+    from google.cloud.firestore import Query
     docs = (
         db.collection(COLLECTION)
         .where("hazard_id", "==", hazard_id)
-        .order_by("submitted_at")
+        .order_by("submitted_at", direction=Query.DESCENDING)
         .stream()
     )
     return [Report.from_dict(doc.to_dict(), doc.id) for doc in docs]

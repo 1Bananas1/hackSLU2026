@@ -3,6 +3,7 @@ import { Hazard, Session, CreateHazardPayload, CreateSessionPayload } from '../t
 // Re-export types so callers can import them from this module
 export type { Hazard, Session, CreateHazardPayload, CreateSessionPayload };
 import { Platform } from 'react-native';
+import { auth } from './firebase';
 
 const defaultBaseUrl =
   Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://127.0.0.1:5000';
@@ -13,13 +14,11 @@ export const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? defaultBaseUrl;
 // ---------------------------------------------------------------------------
 
 /**
- * Returns the Firebase ID token for the current user.
- * TODO: replace stub with real Firebase Auth once configured, e.g.:
- *   import auth from '@react-native-firebase/auth';
- *   return (await auth().currentUser?.getIdToken()) ?? '';
+ * Returns the Firebase ID token for the current user, or '' if not signed in.
+ * The token is automatically refreshed by the Firebase SDK when it expires.
  */
 async function getAuthToken(): Promise<string> {
-  return '';
+  return (await auth.currentUser?.getIdToken()) ?? '';
 }
 
 // ---------------------------------------------------------------------------
