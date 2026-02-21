@@ -5,3 +5,6 @@ serviceAccountKey.json
 
 # Environment variables
 .env
+
+# pycache
+__pycache__/*
