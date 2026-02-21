@@ -1,1 +1,7 @@
 src/ML/.venv/*
+
+# Firebase service account key — never commit this
+serviceAccountKey.json
+
+# Environment variables
+.env

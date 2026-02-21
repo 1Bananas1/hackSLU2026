@@ -1,0 +1,5 @@
+# Firebase Admin SDK (includes google-cloud-firestore as a dependency)
+firebase-admin>=6.2.0
+
+# Load FIREBASE_KEY_PATH and other secrets from a .env file
+python-dotenv>=1.0.0
