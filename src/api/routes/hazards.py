@@ -9,6 +9,7 @@ Endpoints:
     GET    /hazards                     — list all hazards (newest first)
     GET    /hazards/<id>                — fetch one hazard
     DELETE /hazards/<id>                — delete a hazard
+    POST   /hazards/<id>/dismiss        — mark a hazard dismissed (driver said "no")
     POST   /hazards/<id>/report         — submit a formal city report (encrypts PII)
     GET    /sessions/<id>/hazards       — hazards for a session (asc by time)
 """
@@ -102,6 +103,29 @@ def remove_hazard(hazard_id: str):
         return jsonify({"error": "Hazard not found"}), 404
     delete_hazard(hazard_id)
     return jsonify({"message": "Hazard deleted", "hazard_id": hazard_id})
+
+
+@hazards_bp.post("/hazards/<hazard_id>/dismiss")
+@require_auth
+def dismiss_hazard(hazard_id: str):
+    """
+    Mark a hazard as dismissed — used when the driver denies the detection
+    via voice confirmation.
+
+    Transitions status: "pending" -> "dismissed".
+    A dismissed hazard cannot be reported to the city (POST /hazards/<id>/report
+    will return 409).
+    """
+    hazard = get_hazard(hazard_id)
+    if hazard is None:
+        return jsonify({"error": "Hazard not found"}), 404
+    if hazard.status == "dismissed":
+        return jsonify({"error": "Hazard is already dismissed"}), 409
+    if hazard.status == "reported":
+        return jsonify({"error": "Cannot dismiss a hazard that has already been reported"}), 409
+
+    update_hazard_status(hazard_id, "dismissed")
+    return jsonify({"message": "Hazard dismissed", "hazard_id": hazard_id})
 
 
 @hazards_bp.post("/hazards/<hazard_id>/report")
