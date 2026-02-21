@@ -45,7 +45,7 @@ Vigilane is an innovative application that utilizes computer vision to detect po
 
 3. **Install dependencies:**
    ```bash
-   npm install
+   npm install --legacy-peer-deps
    ```
 
 4. **Start the Expo development server:**
