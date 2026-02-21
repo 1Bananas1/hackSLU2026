@@ -33,6 +33,9 @@ yarn-error.*
 # Expo / React Native
 # =============================================================================
 
+# expo-cli auto-generates this file; patterns are covered by this root gitignore
+Vigilane/.gitignore
+
 .expo/
 dist/
 web-build/
