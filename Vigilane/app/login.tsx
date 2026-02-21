@@ -16,7 +16,6 @@ import {
   signInWithCredential,
   signInWithPopup,
 } from 'firebase/auth';
-import { makeRedirectUri } from 'expo-auth-session';
 import { auth } from '@/services/firebase';
 
 // ---------------------------------------------------------------------------
@@ -43,37 +42,56 @@ export default function LoginScreen() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [signingIn, setSigningIn] = useState(false);
 
-  // ── expo-auth-session (native only) ─────────────────────────────────────
-  // Must be called unconditionally (Rules of Hooks).
-  // On web we always use signInWithPopup instead, but we still need to call
-  // the hook — pass webClientId so the internal invariant doesn't throw.
-  const redirectUri = makeRedirectUri({ scheme: 'vigilane', preferLocalhost: true });
+  // All three client IDs are read from .env.local via EXPO_PUBLIC_* vars.
+  // On Android the native PKCE flow requires a custom dev build (npx expo
+  // run:android) whose debug keystore SHA-1 is registered in Google Cloud
+  // Console. This will NOT work inside Expo Go (exp:// redirect is rejected).
   const [, response, promptAsync] = Google.useAuthRequest({
     webClientId:     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '',
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ?? '',
     iosClientId:     process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-    redirectUri,
+    scopes: ['openid', 'profile', 'email'],
   });
 
-  // Native: handle the OAuth callback
+  // Handle the OAuth callback (native only — web uses signInWithPopup)
   useEffect(() => {
     if (Platform.OS === 'web') return;
-    if (response?.type === 'success') {
-      const idToken = response.params.id_token;
+    if (!response) return;
+
+    console.log('[Auth] response type:', response.type);
+
+    if (response.type === 'success') {
+      // Android code-exchange (PKCE) → token lives in response.authentication
+      // Implicit flow fallback → token lives in response.params
+      const idToken =
+        response.authentication?.idToken ??
+        response.params?.id_token ??
+        null;
+
       if (!idToken) {
-        setAuthError('Google did not return an ID token. Check your OAuth client IDs.');
+        setAuthError(
+          'Google did not return an ID token. ' +
+          'Make sure the Android OAuth client ID matches the signing key.',
+        );
         setSigningIn(false);
         return;
       }
+
       const credential = GoogleAuthProvider.credential(idToken);
       signInWithCredential(auth, credential).catch((err: Error) => {
+        console.error('[Auth] signInWithCredential error:', err);
         setAuthError(err.message);
         setSigningIn(false);
       });
-    } else if (response?.type === 'error') {
-      setAuthError(response.error?.message ?? 'Google sign-in failed.');
+    } else if (response.type === 'error') {
+      const msg =
+        response.error?.message ??
+        response.error?.code ??
+        'Google sign-in failed.';
+      console.error('[Auth] OAuth error:', msg);
+      setAuthError(msg);
       setSigningIn(false);
-    } else if (response?.type === 'cancel' || response?.type === 'dismiss') {
+    } else if (response.type === 'cancel' || response.type === 'dismiss') {
       setSigningIn(false);
     }
   }, [response]);
@@ -83,12 +101,10 @@ export default function LoginScreen() {
     setSigningIn(true);
     try {
       if (Platform.OS === 'web') {
-        // Web: popup — no page redirect, no race condition with the auth guard
         const provider = new GoogleAuthProvider();
         await signInWithPopup(auth, provider);
-        // onAuthStateChanged in AuthContext will fire → AuthGuard redirects to app
       } else {
-        // Native: expo-auth-session OAuth flow
+        // Opens Google sign-in via Chrome Custom Tab on Android
         await promptAsync();
       }
     } catch (err: unknown) {
