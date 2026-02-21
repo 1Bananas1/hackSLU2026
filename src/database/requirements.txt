@@ -1,5 +1,8 @@
-# Firebase Admin SDK (includes google-cloud-firestore as a dependency)
+# Firebase Admin SDK (includes google-cloud-firestore and Storage as dependencies)
 firebase-admin>=6.2.0
 
 # Load FIREBASE_KEY_PATH and other secrets from a .env file
 python-dotenv>=1.0.0
+
+# Symmetric encryption for PII fields (Fernet = AES-128-CBC + HMAC-SHA256)
+cryptography>=42.0.0

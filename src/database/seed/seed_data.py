@@ -10,7 +10,7 @@ Safe to run multiple times — each run creates a new, independent session.
 
 import sys
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Allow running as a top-level script from the repo root
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
@@ -26,17 +26,17 @@ from src.database.services.hazard_service import save_hazard
 
 SAMPLE_HAZARDS = [
     {
+        "event_type": "pothole",
         "confidence": 0.85,
-        "bboxes": [[120, 200, 300, 380]],
-        "labels": ["pothole"],
-        "frame_number": 50,
+        "location": {"lat": 38.6270, "lng": -90.1994},
+        "photo_url": None,
         "offset_seconds": 0,
     },
     {
+        "event_type": "crack",
         "confidence": 0.72,
-        "bboxes": [[400, 150, 560, 290]],
-        "labels": ["crack"],
-        "frame_number": 125,
+        "location": {"lat": 38.6275, "lng": -90.1998},
+        "photo_url": None,
         "offset_seconds": 5,
     },
 ]
@@ -47,20 +47,20 @@ def seed() -> None:
     session = create_session(device_id="webcam_0_seed")
     print(f"[SEED] Session created: {session.id}")
 
-    base_time = datetime.utcnow()
+    base_time = datetime.now(timezone.utc)
 
     for sample in SAMPLE_HAZARDS:
         hazard = Hazard(
-            confidence=sample["confidence"],
-            bboxes=sample["bboxes"],
-            labels=sample["labels"],
             session_id=session.id,
+            event_type=sample["event_type"],
+            confidence=sample["confidence"],
+            location=sample["location"],
+            photo_url=sample["photo_url"],
             timestamp=base_time + timedelta(seconds=sample["offset_seconds"]),
-            frame_number=sample["frame_number"],
         )
         hazard_id = save_hazard(hazard)
         increment_hazard_count(session.id)
-        print(f"[SEED] Hazard saved: {hazard_id}  ({sample['labels']})")
+        print(f"[SEED] Hazard saved: {hazard_id}  ({sample['event_type']})")
 
     end_session(session.id)
     print(f"[SEED] Session {session.id} closed. Done.")
