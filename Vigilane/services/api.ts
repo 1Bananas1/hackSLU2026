@@ -1,76 +1,112 @@
-import { Hazard, LiveDetection, Settings, ReportPayload } from '../types';
+import { Hazard, Session, CreateHazardPayload, CreateSessionPayload } from '../types';
 
-export const BASE_URL = 'http://localhost:5000';
+export const BASE_URL = 'http://127.0.0.1:5000';
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+// ---------------------------------------------------------------------------
+// Auth token
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the Firebase ID token for the current user.
+ * TODO: replace stub with real Firebase Auth once configured, e.g.:
+ *   import auth from '@react-native-firebase/auth';
+ *   return (await auth().currentUser?.getIdToken()) ?? '';
+ */
+async function getAuthToken(): Promise<string> {
+  return '';
+}
+
+// ---------------------------------------------------------------------------
+// Base fetch wrapper
+// ---------------------------------------------------------------------------
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = await getAuthToken();
   const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers ?? {}),
+    },
   });
   if (!res.ok) {
-    throw new Error(`API error ${res.status}: ${res.statusText}`);
+    const body = await res.text();
+    throw new Error(`API ${res.status} ${res.statusText}: ${body}`);
   }
   return res.json() as Promise<T>;
 }
 
-/**
- * GET /api/hazards?filter=<filter>
- * Returns list of hazards, optionally filtered by type or status.
- * filter: 'All' | 'Potholes' | 'Accidents' | 'Debris' | 'Reported'
- */
-export function getHazards(filter = 'All'): Promise<Hazard[]> {
-  const params = filter !== 'All' ? `?filter=${encodeURIComponent(filter)}` : '';
-  return request<Hazard[]>(`/api/hazards${params}`);
+// ---------------------------------------------------------------------------
+// Health check
+// ---------------------------------------------------------------------------
+
+/** GET / — no auth required */
+export async function healthCheck(): Promise<{ status: string; service: string }> {
+  const res = await fetch(`${BASE_URL}/`);
+  return res.json();
 }
 
-/**
- * GET /api/hazards/:id
- * Returns a single hazard by ID with full details including activityLog.
- */
-export function getHazard(id: string): Promise<Hazard> {
-  return request<Hazard>(`/api/hazards/${id}`);
-}
+// ---------------------------------------------------------------------------
+// Sessions  —  POST/GET /sessions, POST /sessions/<id>/end
+// ---------------------------------------------------------------------------
 
-/**
- * POST /api/hazards
- * Manually report a new hazard from the live dashboard.
- */
-export function reportHazard(payload: ReportPayload): Promise<{ id: string }> {
-  return request<{ id: string }>('/api/hazards', {
+/** POST /sessions — start a new dashcam recording session */
+export function createSession(device_id: string): Promise<Session> {
+  const payload: CreateSessionPayload = { device_id };
+  return request<Session>('/sessions', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
-/**
- * GET /api/live/detection
- * Returns the most recent active detection for the live dashboard.
- * Returns null body (204) when nothing is currently detected.
- */
-export async function getLiveDetection(): Promise<LiveDetection | null> {
-  const res = await fetch(`${BASE_URL}/api/live/detection`, {
-    headers: { 'Content-Type': 'application/json' },
+/** GET /sessions — all sessions, newest first */
+export function getSessions(): Promise<Session[]> {
+  return request<Session[]>('/sessions');
+}
+
+/** GET /sessions/<id> — fetch one session */
+export function getSession(id: string): Promise<Session> {
+  return request<Session>(`/sessions/${id}`);
+}
+
+/** POST /sessions/<id>/end — mark session as completed */
+export function endSession(id: string): Promise<{ message: string; session_id: string }> {
+  return request<{ message: string; session_id: string }>(`/sessions/${id}/end`, {
+    method: 'POST',
   });
-  if (res.status === 204) return null;
-  if (!res.ok) throw new Error(`API error ${res.status}: ${res.statusText}`);
-  return res.json() as Promise<LiveDetection>;
 }
 
-/**
- * GET /api/settings
- * Returns current device/app settings.
- */
-export function getSettings(): Promise<Settings> {
-  return request<Settings>('/api/settings');
+/** GET /sessions/<id>/hazards — hazards for a session, ascending by timestamp */
+export function getSessionHazards(sessionId: string): Promise<Hazard[]> {
+  return request<Hazard[]>(`/sessions/${sessionId}/hazards`);
 }
 
-/**
- * PUT /api/settings
- * Persists a partial or full settings update.
- */
-export function updateSettings(settings: Partial<Settings>): Promise<Settings> {
-  return request<Settings>('/api/settings', {
-    method: 'PUT',
-    body: JSON.stringify(settings),
+// ---------------------------------------------------------------------------
+// Hazards  —  POST/GET/DELETE /hazards
+// ---------------------------------------------------------------------------
+
+/** GET /hazards — all hazards, newest first */
+export function getHazards(): Promise<Hazard[]> {
+  return request<Hazard[]>('/hazards');
+}
+
+/** GET /hazards/<id> — fetch one hazard */
+export function getHazard(id: string): Promise<Hazard> {
+  return request<Hazard>(`/hazards/${id}`);
+}
+
+/** POST /hazards — record a new hazard event (also used for manual reports) */
+export function createHazard(payload: CreateHazardPayload): Promise<Hazard> {
+  return request<Hazard>('/hazards', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+/** DELETE /hazards/<id> — permanently delete a hazard */
+export function deleteHazard(id: string): Promise<{ message: string; hazard_id: string }> {
+  return request<{ message: string; hazard_id: string }>(`/hazards/${id}`, {
+    method: 'DELETE',
   });
 }

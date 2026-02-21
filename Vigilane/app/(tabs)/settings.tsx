@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,12 +7,13 @@ import {
   TouchableOpacity,
   StatusBar,
   Switch,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { getSettings, updateSettings } from '../../services/api';
 import { Settings } from '../../types';
+
+// Settings are local-only — there is no /settings endpoint in the current API.
+// TODO: persist to AsyncStorage or add a Firestore `settings` collection.
 
 const DEFAULT_SETTINGS: Settings = {
   potholesEnabled: true,
@@ -40,37 +41,10 @@ const colors = {
 
 export default function SafetySettings() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    getSettings()
-      .then(setSettings)
-      .catch(() => {
-        // Fall back to defaults if API unavailable
-        setSettings(DEFAULT_SETTINGS);
-      })
-      .finally(() => setLoading(false));
-  }, []);
-
-  const toggle = useCallback(async (key: keyof Settings, value: boolean) => {
-    const updated = { ...settings, [key]: value };
-    setSettings(updated); // optimistic update
-    try {
-      await updateSettings({ [key]: value });
-    } catch {
-      setSettings(settings); // revert on failure
-    }
-  }, [settings]);
-
-  if (loading) {
-    return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const toggle = (key: keyof Settings, value: boolean) => {
+    setSettings((prev) => ({ ...prev, [key]: value }));
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -269,7 +243,6 @@ export default function SafetySettings() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

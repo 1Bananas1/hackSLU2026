@@ -10,9 +10,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { getLiveDetection, reportHazard } from '../../services/api';
-import { LiveDetection } from '../../types';
+import { createSession, endSession, getSessionHazards, createHazard } from '../../services/api';
+import { Hazard, Session } from '../../types';
 
+const DEVICE_ID = 'dashcam_0';
 const POLL_INTERVAL_MS = 3000;
 
 function formatElapsed(seconds: number): string {
@@ -26,11 +27,12 @@ export default function VigilaneLiveDashboard() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const bounceAnim = useRef(new Animated.Value(0)).current;
 
+  const [session, setSession] = useState<Session | null>(null);
+  const [latestHazard, setLatestHazard] = useState<Hazard | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [detection, setDetection] = useState<LiveDetection | null>(null);
   const [reporting, setReporting] = useState(false);
 
-  // Pulsing dot + bounce animations
+  // Pulse + bounce animations
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -38,7 +40,6 @@ export default function VigilaneLiveDashboard() {
         Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
       ])
     ).start();
-
     Animated.loop(
       Animated.sequence([
         Animated.timing(bounceAnim, { toValue: -8, duration: 600, useNativeDriver: true }),
@@ -47,39 +48,58 @@ export default function VigilaneLiveDashboard() {
     ).start();
   }, [pulseAnim, bounceAnim]);
 
+  // Create session on mount, end it on unmount
+  useEffect(() => {
+    let mounted = true;
+    createSession(DEVICE_ID)
+      .then((s) => { if (mounted) setSession(s); })
+      .catch(() => { /* session creation failed — continue without one */ });
+    return () => {
+      mounted = false;
+      // endSession is best-effort; don't await
+      setSession((s) => {
+        if (s) endSession(s.id).catch(() => {});
+        return null;
+      });
+    };
+  }, []);
+
   // Recording timer
   useEffect(() => {
     const timer = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Live detection polling
-  const pollDetection = useCallback(async () => {
+  // Poll session hazards for live detection
+  const pollHazards = useCallback(async () => {
+    if (!session) return;
     try {
-      const data = await getLiveDetection();
-      setDetection(data);
+      const hazards = await getSessionHazards(session.id);
+      if (hazards.length > 0) {
+        setLatestHazard(hazards[hazards.length - 1]);
+      }
     } catch {
-      // Silently ignore poll failures — don't interrupt the UI
+      // Silently ignore poll failures
     }
-  }, []);
+  }, [session]);
 
   useEffect(() => {
-    pollDetection();
-    const interval = setInterval(pollDetection, POLL_INTERVAL_MS);
+    if (!session) return;
+    pollHazards();
+    const interval = setInterval(pollHazards, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [pollDetection]);
+  }, [session, pollHazards]);
 
   const handleReportHazard = async () => {
-    if (reporting) return;
+    if (reporting || !session) return;
     setReporting(true);
     try {
-      await reportHazard({
-        type: detection?.hazardType ?? 'unknown',
-        location: 'Current location',
-        latitude: 0,
-        longitude: 0,
-        vehicleSpeed: 0,
-        gForce: 0,
+      await createHazard({
+        session_id: session.id,
+        confidence: 1.0,
+        labels: ['manual'],
+        bboxes: [],
+        frame_number: 0,
       });
     } catch {
       // TODO: show toast on error
@@ -88,8 +108,14 @@ export default function VigilaneLiveDashboard() {
     }
   };
 
-  const alertLabel = detection?.isActive
-    ? `${detection.hazardType.charAt(0).toUpperCase() + detection.hazardType.slice(1)} on ${detection.lane} • ${detection.distanceFt}ft`
+  // Show alert if the most recent hazard is within 30 seconds
+  const showAlert = latestHazard != null && (() => {
+    const ageMs = Date.now() - new Date(latestHazard.timestamp).getTime();
+    return ageMs < 30_000;
+  })();
+
+  const alertLabel = showAlert && latestHazard
+    ? `${(latestHazard.labels[0] ?? 'hazard').charAt(0).toUpperCase() + (latestHazard.labels[0] ?? 'hazard').slice(1)} detected • ${Math.round(latestHazard.confidence * 100)}% confidence`
     : null;
 
   return (
@@ -109,10 +135,10 @@ export default function VigilaneLiveDashboard() {
         {/* Top Bar */}
         <View style={styles.topBar}>
           <View style={styles.glassPanel}>
-            <MaterialIcons name="verified-user" size={20} color="#34d399" />
+            <MaterialIcons name="verified-user" size={20} color={session ? '#34d399' : '#94a3b8'} />
             <View style={styles.statusTextContainer}>
               <Text style={styles.statusTitle}>Vigilane Active</Text>
-              <Text style={styles.statusSubtitle}>SYSTEM ONLINE</Text>
+              <Text style={styles.statusSubtitle}>{session ? 'SESSION LIVE' : 'CONNECTING…'}</Text>
             </View>
           </View>
 
@@ -122,15 +148,15 @@ export default function VigilaneLiveDashboard() {
           </View>
         </View>
 
-        {/* AR Detection Layer */}
-        {detection?.isActive && (
+        {/* AR Detection Box — shown when recent hazard exists */}
+        {showAlert && latestHazard && (
           <View style={styles.arLayer}>
             <View style={[styles.arBox, { top: '40%', left: '30%' }]}>
               <View style={styles.arBadge}>
                 <MaterialIcons name="warning" size={12} color="#000" />
-                <Text style={styles.arBadgeText}>{detection.hazardType.toUpperCase()}</Text>
+                <Text style={styles.arBadgeText}>{(latestHazard.labels[0] ?? '').toUpperCase()}</Text>
               </View>
-              <Text style={styles.arDistance}>{detection.distanceFt}ft</Text>
+              <Text style={styles.arConfidence}>{Math.round(latestHazard.confidence * 100)}%</Text>
             </View>
           </View>
         )}
@@ -140,13 +166,12 @@ export default function VigilaneLiveDashboard() {
         {/* Bottom Dashboard */}
         <View style={styles.bottomOverlay}>
 
-          {/* Alert Banner — only shown when detection is active */}
           {alertLabel && (
             <Animated.View style={[styles.alertBannerContainer, { transform: [{ translateY: bounceAnim }] }]}>
               <View style={styles.alertBanner}>
                 <MaterialIcons name="report-problem" size={28} color="#0f172a" />
                 <View style={styles.alertTextContainer}>
-                  <Text style={styles.alertTitle}>Hazard Detected Ahead</Text>
+                  <Text style={styles.alertTitle}>Hazard Detected</Text>
                   <Text style={styles.alertSubtitle}>{alertLabel}</Text>
                 </View>
               </View>
@@ -160,10 +185,10 @@ export default function VigilaneLiveDashboard() {
             </View>
 
             <TouchableOpacity
-              style={[styles.reportButton, reporting && styles.reportButtonDisabled]}
+              style={[styles.reportButton, (reporting || !session) && styles.reportButtonDisabled]}
               activeOpacity={0.8}
               onPress={handleReportHazard}
-              disabled={reporting}
+              disabled={reporting || !session}
             >
               <MaterialIcons name="add-alert" size={28} color="#fff" />
               <Text style={styles.reportButtonText}>
@@ -229,7 +254,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   arBadgeText: { color: '#000', fontSize: 10, fontWeight: '700' },
-  arDistance: {
+  arConfidence: {
     color: '#f59e0b',
     fontSize: 10,
     fontFamily: 'monospace',
@@ -288,6 +313,6 @@ const styles = StyleSheet.create({
     elevation: 8,
     marginBottom: 16,
   },
-  reportButtonDisabled: { opacity: 0.6 },
+  reportButtonDisabled: { opacity: 0.5 },
   reportButtonText: { color: '#fff', fontSize: 18, fontWeight: '700' },
 });
