@@ -7,10 +7,12 @@ import {
   TouchableOpacity,
   StatusBar,
   Switch,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Settings } from '../../types';
+import { useAuth } from '../../context/AuthContext';
 
 // Settings are local-only — there is no /settings endpoint in the current API.
 // TODO: persist to AsyncStorage or add a Firestore `settings` collection.
@@ -41,9 +43,17 @@ const colors = {
 
 export default function SafetySettings() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const { user, signOut } = useAuth();
 
   const toggle = (key: keyof Settings, value: boolean) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSignOut = () => {
+    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign out', style: 'destructive', onPress: signOut },
+    ]);
   };
 
   return (
@@ -220,6 +230,38 @@ export default function SafetySettings() {
             <Text style={[styles.promoDescription, { color: '#cbd5e1' }]}>
               Automatically verify and send severe incident clips to local DOT/Police services to improve road safety.
             </Text>
+          </View>
+        </View>
+
+        {/* Account Section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ACCOUNT</Text>
+          <View style={[styles.cardGroup, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+
+            {user && (
+              <View style={[styles.cardRow, { borderBottomColor: colors.border, borderBottomWidth: 1 }]}>
+                <View style={styles.cardRowLeft}>
+                  <View style={[styles.iconContainer, { backgroundColor: colors.primaryLight }]}>
+                    <MaterialIcons name="account-circle" size={20} color={colors.primary} />
+                  </View>
+                  <View style={styles.rowTextColumn}>
+                    <Text style={[styles.rowText, { color: colors.textPrimary }]}>{user.displayName ?? 'User'}</Text>
+                    <Text style={[styles.rowSubtext, { color: colors.textSecondary }]}>{user.email}</Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            <TouchableOpacity style={styles.cardRow} onPress={handleSignOut} activeOpacity={0.7}>
+              <View style={styles.cardRowLeft}>
+                <View style={[styles.iconContainer, { backgroundColor: 'rgba(239,68,68,0.12)' }]}>
+                  <MaterialIcons name="logout" size={20} color="#ef4444" />
+                </View>
+                <Text style={[styles.rowText, { color: '#ef4444' }]}>Sign out</Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={20} color={colors.textMuted} />
+            </TouchableOpacity>
+
           </View>
         </View>
 
