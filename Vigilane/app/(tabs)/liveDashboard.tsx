@@ -1,20 +1,26 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ImageBackground,
   StatusBar,
   Animated,
+  Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { createSession, endSession, getSessionHazards, createHazard } from '../../services/api';
-import { Hazard, Session } from '../../types';
+import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
+import { usePotholeDetector } from '@/hooks/usePotholeDetector';
+import { writeHazard } from '@/services/firestore';
+import { createSession, endSession, createHazard } from '@/services/api';
+import type { Hazard, Session } from '@/types';
 
-const DEVICE_ID = 'dashcam_0';
-const POLL_INTERVAL_MS = 3000;
+// Derive a stable device identifier from the platform so multiple devices
+// create distinct sessions.  For production, replace with a persisted UUID
+// (e.g. expo-secure-store) or the device's hardware ID.
+const DEVICE_ID = `${Platform.OS}_dashcam`;
 
 function formatElapsed(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -32,7 +38,17 @@ export default function VigilaneLiveDashboard() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [reporting, setReporting] = useState(false);
 
-  // Pulse + bounce animations
+  // ── Camera ────────────────────────────────────────────────────────────────
+  const { hasPermission, requestPermission } = useCameraPermission();
+  const device = useCameraDevice('back');
+  const { frameProcessor, lastAlert, modelState } = usePotholeDetector();
+
+  // Request camera permission on mount.
+  useEffect(() => {
+    requestPermission();
+  }, [requestPermission]);
+
+  // ── Animations ────────────────────────────────────────────────────────────
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -48,7 +64,7 @@ export default function VigilaneLiveDashboard() {
     ).start();
   }, [pulseAnim, bounceAnim]);
 
-  // Create session on mount, end it on unmount
+  // ── Session lifecycle ─────────────────────────────────────────────────────
   useEffect(() => {
     let mounted = true;
     createSession(DEVICE_ID)
@@ -56,7 +72,6 @@ export default function VigilaneLiveDashboard() {
       .catch(() => { /* session creation failed — continue without one */ });
     return () => {
       mounted = false;
-      // endSession is best-effort; don't await
       setSession((s) => {
         if (s) endSession(s.id).catch(() => {});
         return null;
@@ -64,32 +79,46 @@ export default function VigilaneLiveDashboard() {
     };
   }, []);
 
-  // Recording timer
+  // ── Recording timer ───────────────────────────────────────────────────────
   useEffect(() => {
     const timer = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Poll session hazards for live detection
-  const pollHazards = useCallback(async () => {
-    if (!session) return;
-    try {
-      const hazards = await getSessionHazards(session.id);
-      if (hazards.length > 0) {
-        setLatestHazard(hazards[hazards.length - 1]);
-      }
-    } catch {
-      // Silently ignore poll failures
-    }
-  }, [session]);
-
+  // ── On-device detection handler ───────────────────────────────────────────
+  // Runs each time usePotholeDetector fires a new alert (≥30-frame cooldown).
+  // Updates the displayed hazard, writes to Firestore + Flask (fire-and-forget),
+  // then clears the banner after 30 seconds.
   useEffect(() => {
-    if (!session) return;
-    pollHazards();
-    const interval = setInterval(pollHazards, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [session, pollHazards]);
+    if (!lastAlert || !session) return;
 
+    const localHazard: Hazard = {
+      id: `local-${lastAlert.timestamp}`,
+      session_id: session.id,
+      confidence: lastAlert.confidence,
+      labels: lastAlert.labels,
+      bboxes: lastAlert.bboxes,
+      frame_number: 0,
+      timestamp: new Date(lastAlert.timestamp).toISOString(),
+      status: 'pending',
+    };
+
+    setLatestHazard(localHazard);
+
+    // Fire-and-forget persistence — detection must never block on I/O.
+    void writeHazard(session.id, {
+      confidence: lastAlert.confidence,
+      bboxes: lastAlert.bboxes,
+      labels: lastAlert.labels,
+      frameNumber: 0,
+    });
+
+    // Clear banner after 30 seconds (acceptance criteria).
+    const clearTimer = setTimeout(() => setLatestHazard(null), 30_000);
+    return () => clearTimeout(clearTimer);
+  }, [lastAlert, session]);
+
+  // ── Manual report button ──────────────────────────────────────────────────
   const handleReportHazard = async () => {
     if (reporting || !session) return;
     setReporting(true);
@@ -101,14 +130,18 @@ export default function VigilaneLiveDashboard() {
         bboxes: [],
         frame_number: 0,
       });
-    } catch {
-      // TODO: show toast on error
+    } catch (err) {
+      Alert.alert(
+        'Report Failed',
+        'Could not submit hazard report. Check your connection and try again.',
+        [{ text: 'OK' }],
+      );
     } finally {
       setReporting(false);
     }
   };
 
-  // Show alert if the most recent hazard is within 30 seconds
+  // ── Alert display logic ───────────────────────────────────────────────────
   const showAlert = latestHazard != null && (() => {
     const ageMs = Date.now() - new Date(latestHazard.timestamp).getTime();
     return ageMs < 30_000;
@@ -122,17 +155,33 @@ export default function VigilaneLiveDashboard() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      <ImageBackground
-        source={{ uri: 'https://images.unsplash.com/photo-1600030230325-188b89d4fb98?w=800&q=80' }}
-        style={StyleSheet.absoluteFillObject}
-        resizeMode="cover"
-      >
-        <View style={styles.overlay} />
-      </ImageBackground>
+      {/* ── Live camera feed ─────────────────────────────────────────────── */}
+      {hasPermission && device != null ? (
+        <Camera
+          style={StyleSheet.absoluteFill}
+          device={device}
+          isActive
+          frameProcessor={frameProcessor}
+          pixelFormat="yuv"
+        />
+      ) : (
+        // Fallback dark background while awaiting permission / camera device.
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0a1628' }]} />
+      )}
+
+      {/* Semi-transparent overlay so UI text remains readable over the feed */}
+      <View style={styles.overlay} />
+
+      {/* Model-loading indicator (shown until TFLite model is ready) */}
+      {modelState === 'loading' && (
+        <View style={styles.modelLoadingBadge}>
+          <Text style={styles.modelLoadingText}>Loading model…</Text>
+        </View>
+      )}
 
       <SafeAreaView style={styles.safeArea}>
 
-        {/* Top Bar */}
+        {/* ── Top bar ── */}
         <View style={styles.topBar}>
           <View style={styles.glassPanel}>
             <MaterialIcons name="verified-user" size={20} color={session ? '#34d399' : '#94a3b8'} />
@@ -148,24 +197,44 @@ export default function VigilaneLiveDashboard() {
           </View>
         </View>
 
-        {/* AR Detection Box — shown when recent hazard exists */}
-        {showAlert && latestHazard && (
+        {/* ── AR bounding-box overlays — drawn from live detections ── */}
+        {showAlert && latestHazard && latestHazard.bboxes.length > 0 && (
           <View style={styles.arLayer}>
-            <View style={[styles.arBox, { top: '40%', left: '30%' }]}>
-              <View style={styles.arBadge}>
-                <MaterialIcons name="warning" size={12} color="#000" />
-                <Text style={styles.arBadgeText}>{(latestHazard.labels[0] ?? '').toUpperCase()}</Text>
+            {latestHazard.bboxes.map((bbox, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.arBox,
+                  {
+                    // Bboxes are normalised [0, 1]; percentage strings map
+                    // them onto the full-screen container dimensions.
+                    top: `${(bbox.y1 * 100).toFixed(1)}%` as unknown as number,
+                    left: `${(bbox.x1 * 100).toFixed(1)}%` as unknown as number,
+                    width: `${((bbox.x2 - bbox.x1) * 100).toFixed(1)}%` as unknown as number,
+                    height: `${((bbox.y2 - bbox.y1) * 100).toFixed(1)}%` as unknown as number,
+                  },
+                ]}
+              >
+                <View style={styles.arBadge}>
+                  <MaterialIcons name="warning" size={12} color="#000" />
+                  <Text style={styles.arBadgeText}>
+                    {(latestHazard.labels[i] ?? latestHazard.labels[0] ?? '').toUpperCase()}
+                  </Text>
+                </View>
+                <Text style={styles.arConfidence}>
+                  {Math.round(latestHazard.confidence * 100)}%
+                </Text>
               </View>
-              <Text style={styles.arConfidence}>{Math.round(latestHazard.confidence * 100)}%</Text>
-            </View>
+            ))}
           </View>
         )}
 
         <View style={styles.flexSpacer} />
 
-        {/* Bottom Dashboard */}
+        {/* ── Bottom dashboard ── */}
         <View style={styles.bottomOverlay}>
 
+          {/* Alert banner — existing bounce animation wired to lastAlert */}
           {alertLabel && (
             <Animated.View style={[styles.alertBannerContainer, { transform: [{ translateY: bounceAnim }] }]}>
               <View style={styles.alertBanner}>
@@ -179,6 +248,7 @@ export default function VigilaneLiveDashboard() {
           )}
 
           <View style={styles.dashGrid}>
+            {/* Speed widget — placeholder; wire to GPS in a future milestone */}
             <View style={styles.speedWidget}>
               <Text style={styles.speedNumber}>65</Text>
               <Text style={styles.speedUnit}>MPH</Text>
@@ -205,8 +275,19 @@ export default function VigilaneLiveDashboard() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
   safeArea: { flex: 1 },
+  modelLoadingBadge: {
+    position: 'absolute',
+    top: 60,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 12,
+    zIndex: 30,
+  },
+  modelLoadingText: { color: '#94a3b8', fontSize: 12, fontWeight: '600' },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -234,8 +315,6 @@ const styles = StyleSheet.create({
   arLayer: { ...StyleSheet.absoluteFillObject, zIndex: 10, pointerEvents: 'none' },
   arBox: {
     position: 'absolute',
-    width: 120,
-    height: 90,
     borderWidth: 2,
     borderColor: 'rgba(245, 158, 11, 0.8)',
     backgroundColor: 'rgba(245, 158, 11, 0.1)',

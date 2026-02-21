@@ -18,6 +18,7 @@ export interface HazardLocation {
 export interface Hazard {
   id: string;           // Firestore document ID (injected by API)
   session_id: string;
+  event_type: string;   // Primary hazard category, e.g. "pothole"
   confidence: number;   // 0.0 – 1.0
   labels: string[];     // e.g. ["pothole"]
   bboxes: BoundingBox[];
@@ -50,6 +51,9 @@ export interface CreateHazardPayload {
   labels: string[];
   bboxes: BoundingBox[];
   frame_number?: number;
+  photo_url?: string | null;
+  location?: HazardLocation | null;
+  status?: 'pending' | 'reported' | 'dismissed';
 }
 
 /** POST /sessions */

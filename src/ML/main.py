@@ -264,7 +264,7 @@ def main():
             print(f"[WARN] API client setup failed: {exc}")
 
     # --- Model loading ---
-    model, processor, device, dtype = load_model()
+    model = load_model()
 
     source = args.webcam if args.webcam is not None else args.video
     cap = cv2.VideoCapture(source)
@@ -277,6 +277,8 @@ def main():
     frame_skip = args.skip
     window_size = args.window
     debug = args.debug
+    if debug:
+        os.environ["YOLO_RAW_DEBUG"] = "1"
 
     # Rolling window: 1 = pothole detected this frame, 0 = not detected
     detection_window = deque(maxlen=window_size)
@@ -321,12 +323,12 @@ def main():
                 current_confidence = sum(detection_window) / window_size
 
                 if (
-                    current_confidence >= threshold
-                    and (processed_count - last_alert_processed) >= ALERT_COOLDOWN
+                    current_confidence >= SMOOTHED_THRESHOLD
+                    and (processed_count - last_alert_frame) >= ALERT_COOLDOWN
                 ):
                     # Log the raw detection
-                    trigger_alert(current_confidence, bboxes, frame_count)
-                    last_alert_processed = processed_count
+                    trigger_alert(current_confidence, detections, frame_count)
+                    last_alert_frame = processed_count
 
                     # -------------------------------------------------------
                     # Voice confirmation flow
@@ -364,9 +366,9 @@ def main():
             if show_window:
                 if detections:
                     frame = annotate_frame(frame, detections, max_conf)
-                elif smoothed > 0:
+                elif current_confidence > 0:
                     cv2.putText(
-                        frame, f"Smoothed: {smoothed:.2f}", (10, 30),
+                        frame, f"Smoothed: {current_confidence:.2f}", (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 200, 0), 2,
                     )
                 cv2.imshow("Pothole Detector", frame)

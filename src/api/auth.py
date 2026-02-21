@@ -23,10 +23,10 @@ from functools import wraps
 import firebase_admin.auth as firebase_auth
 from flask import g, jsonify, request
 
-from src.database.config import initialize_firebase
-
-# Ensure Firebase is initialized before any auth calls.
-initialize_firebase()
+# Firebase is initialised in create_app() before any request arrives.
+# Do NOT call initialize_firebase() here — module-level side effects
+# prevent the app factory from controlling startup order and make
+# import-time failures hard to debug.
 
 
 def _extract_token() -> str | None:

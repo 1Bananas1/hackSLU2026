@@ -14,14 +14,14 @@ Fields:
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
 @dataclass
 class Session:
     device_id: str
-    start_time: datetime = field(default_factory=datetime.utcnow)
+    start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     end_time: Optional[datetime] = None
     hazard_count: int = 0
     status: str = "active"  # "active" | "completed"
@@ -42,7 +42,7 @@ class Session:
         """Deserialize from a Firestore document dict."""
         return cls(
             device_id=data["device_id"],
-            start_time=data.get("start_time", datetime.utcnow()),
+            start_time=data.get("start_time", datetime.now(timezone.utc)),
             end_time=data.get("end_time"),
             hazard_count=data.get("hazard_count", 0),
             status=data.get("status", "active"),

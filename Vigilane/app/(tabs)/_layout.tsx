@@ -37,11 +37,12 @@ export default function TabLayout() {
         name="camera"
         options={{
           title: 'Camera',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="camera.fill" color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="camera-alt" size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
-        name="explore"
         name="liveDashboard"
         options={{
           title: 'Live View',
