@@ -5,10 +5,21 @@ HackSLU 2026 - Dashcam Infrastructure Auto Reporter
 Detects potholes from a webcam or video file using Florence-2's
 CAPTION_TO_PHRASE_GROUNDING task and a temporal sliding window for confidence.
 
+When a detection is triggered the driver is prompted via audio:
+  "Was that a pothole?"
+A spoken yes/no response confirms or discards the event.  Confirmed
+detections are posted to the Vigilane Flask backend automatically.
+
 Usage:
     python main.py --webcam 0
     python main.py --video dashcam.mp4
     python main.py --webcam 0 --threshold 0.5 --window 15 --skip 3 --no-display
+
+    # With voice confirmation + API reporting:
+    python main.py --webcam 0 --api-url http://127.0.0.1:5000 --auth-token <firebase-id-token>
+
+    # Headless (no voice, no display):
+    python main.py --webcam 0 --no-display --no-voice
 """
 
 import argparse
@@ -182,6 +193,42 @@ def parse_args():
         "--window", type=int, default=WINDOW_SIZE,
         help=f"Sliding window size in processed frames (default: {WINDOW_SIZE})",
     )
+
+    # --- Voice confirmation options ---
+    parser.add_argument(
+        "--no-voice", action="store_true",
+        help="Disable voice confirmation (detections are only logged, not confirmed by voice)",
+    )
+    parser.add_argument(
+        "--fallback", choices=["discard", "keep"], default="discard",
+        help="What to do when the driver gives no clear response after reprompt "
+             "(default: discard)",
+    )
+
+    # --- Backend API options ---
+    parser.add_argument(
+        "--api-url", type=str, default=None, metavar="URL",
+        help="Base URL of the Vigilane Flask backend (e.g. http://127.0.0.1:5000). "
+             "If omitted, confirmed detections are logged locally only.",
+    )
+    parser.add_argument(
+        "--auth-token", type=str, default=None, metavar="TOKEN",
+        help="Firebase ID token for API authentication. "
+             "Can also be set via the VIGILANE_AUTH_TOKEN env variable.",
+    )
+    parser.add_argument(
+        "--device-id", type=str, default=None, metavar="ID",
+        help="Identifier for this camera/device sent when creating a session "
+             "(default: webcam_<INDEX> or the video filename).",
+    )
+    parser.add_argument(
+        "--auto-confirm", action="store_true",
+        help="When used together with --no-voice, automatically confirm every "
+             "detection and post it to the backend without asking the driver. "
+             "Has no effect when voice confirmation is active. "
+             "Intended for fully automated/headless deployments only.",
+    )
+
     return parser.parse_args()
 
 
@@ -191,6 +238,53 @@ def parse_args():
 def main():
     args = parse_args()
 
+    # --- Voice confirmation setup ---
+    voice_handler = None
+    if not args.no_voice:
+        try:
+            from voice_confirmation import VoiceConfirmationHandler
+            voice_handler = VoiceConfirmationHandler(fallback=args.fallback)
+            print("[INFO] Voice confirmation enabled.")
+        except ImportError as exc:
+            print(
+                f"[WARN] Voice confirmation unavailable (missing dependency): {exc}. "
+                "Install with: pip install pyttsx3 SpeechRecognition pyaudio"
+            )
+        except Exception as exc:
+            print(f"[WARN] Voice confirmation unavailable: {exc}")
+
+    # --- API client + session setup ---
+    api_client = None
+    session_id = None
+    if args.api_url:
+        try:
+            from api_client import HazardApiClient
+            api_client = HazardApiClient(
+                base_url=args.api_url,
+                auth_token=args.auth_token,
+            )
+            # Determine a device identifier for the session record
+            if args.device_id:
+                device_id = args.device_id
+            elif args.webcam is not None:
+                device_id = f"webcam_{args.webcam}"
+            else:
+                device_id = args.video
+            session_id = api_client.create_session(device_id)
+            if session_id:
+                print(f"[INFO] Session started: {session_id}")
+            else:
+                print("[WARN] Could not create a backend session. "
+                      "Confirmed hazards will be logged locally only.")
+        except ImportError as exc:
+            print(
+                f"[WARN] API client unavailable (missing dependency): {exc}. "
+                "Install with: pip install requests"
+            )
+        except Exception as exc:
+            print(f"[WARN] API client setup failed: {exc}")
+
+    # --- Model loading ---
     model, processor, device, dtype = load_model()
 
     source = args.webcam if args.webcam is not None else args.video
@@ -254,8 +348,41 @@ def main():
                     current_confidence >= threshold
                     and (processed_count - last_alert_processed) >= ALERT_COOLDOWN
                 ):
+                    # Log the raw detection
                     trigger_alert(current_confidence, bboxes, frame_count)
                     last_alert_processed = processed_count
+
+                    # -------------------------------------------------------
+                    # Voice confirmation flow
+                    # -------------------------------------------------------
+                    if voice_handler is not None:
+                        confirmed = voice_handler.confirm_detection(
+                            event_type="pothole",
+                            confidence=current_confidence,
+                        )
+                    else:
+                        # Voice is disabled. Only confirm (and therefore write to
+                        # the database) when --auto-confirm is explicitly set.
+                        # Without that flag detections are logged locally only —
+                        # the database is never touched without driver confirmation.
+                        confirmed = args.auto_confirm
+
+                    if confirmed:
+                        print("[INFO] Detection CONFIRMED.")
+                        if api_client is not None and session_id is not None:
+                            api_client.post_hazard(
+                                session_id=session_id,
+                                event_type="pothole",
+                                confidence=current_confidence,
+                            )
+                        else:
+                            print("[INFO] (No API configured — detection logged locally only.)")
+                    else:
+                        print("[INFO] Detection DISCARDED by user.")
+
+                    # Clear the sliding window after any handled alert so the
+                    # next event requires a fresh build-up of evidence.
+                    detection_window.clear()
 
             # --- Annotate and show frame ---
             if show_window:
@@ -276,6 +403,9 @@ def main():
         cap.release()
         if show_window:
             cv2.destroyAllWindows()
+        # Close the backend session cleanly
+        if api_client is not None and session_id is not None:
+            api_client.end_session(session_id)
         print("[INFO] Done.")
 
 
