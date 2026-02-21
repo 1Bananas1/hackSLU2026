@@ -52,11 +52,7 @@ export default function SafetySettings() {
 
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity style={styles.backButton}>
-          <MaterialIcons name="arrow-back-ios" size={20} color={colors.textPrimary} style={{ marginLeft: 6 }} />
-        </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Safety Settings</Text>
-        <View style={{ width: 48 }} />
       </View>
 
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>

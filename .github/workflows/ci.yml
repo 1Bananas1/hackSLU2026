@@ -1,0 +1,71 @@
+name: Vigilane CI Validation
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - feature/**
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python-validation:
+    name: Python API/DB Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: src/requirements.txt
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r src/requirements.txt
+
+      - name: Check Python lint (Ruff)
+        run: ruff check src/flask_server.py tests
+
+      - name: Check Python formatting (Ruff)
+        run: ruff format --check src/flask_server.py tests
+
+      - name: Validate Python syntax
+        run: python -m compileall src
+
+      - name: Run Python tests (pytest)
+        run: PYTHONPATH=. pytest -q
+
+  mobile-lint:
+    name: Expo App Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Vigilane
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: Vigilane/package-lock.json
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Run Expo lint
+        run: npm run lint

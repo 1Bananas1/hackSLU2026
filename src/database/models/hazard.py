@@ -47,8 +47,8 @@ class Hazard:
         return {
             "session_id": self.session_id,
             "confidence": self.confidence,
-            "labels": self.labels,
-            "bboxes": self.bboxes,
+            "labels": self.labels or [self.event_type],
+            "bboxes": self.bboxes or [],
             "frame_number": self.frame_number,
             "event_type": self.event_type,
             "timestamp": self.timestamp,
