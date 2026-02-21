@@ -1,76 +1,112 @@
-import { Platform } from 'react-native';
+import { Hazard, Session, CreateHazardPayload, CreateSessionPayload } from '../types';
 
-type Session = {
-  id: string;
-  device_id: string;
-  start_time: string;
-  end_time: string | null;
-  hazard_count: number;
-  status: string;
-};
+export const BASE_URL = 'http://127.0.0.1:5000';
 
-type Hazard = {
-  id: string;
-  confidence: number;
-  bboxes: number[][];
-  labels: string[];
-  session_id: string;
-  timestamp: string;
-  frame_number: number;
-};
+// ---------------------------------------------------------------------------
+// Auth token
+// ---------------------------------------------------------------------------
 
-const defaultApiBase =
-  Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://127.0.0.1:5000';
+/**
+ * Returns the Firebase ID token for the current user.
+ * TODO: replace stub with real Firebase Auth once configured, e.g.:
+ *   import auth from '@react-native-firebase/auth';
+ *   return (await auth().currentUser?.getIdToken()) ?? '';
+ */
+async function getAuthToken(): Promise<string> {
+  return '';
+}
 
-export const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? defaultApiBase;
+// ---------------------------------------------------------------------------
+// Base fetch wrapper
+// ---------------------------------------------------------------------------
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = await getAuthToken();
+  const res = await fetch(`${BASE_URL}${path}`, {
+    ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...(options?.headers ?? {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers ?? {}),
     },
-    ...options,
   });
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    const message = (data as { error?: string })?.error ?? 'Request failed';
-    throw new Error(message);
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`API ${res.status} ${res.statusText}: ${body}`);
   }
-
-  return data as T;
+  return res.json() as Promise<T>;
 }
 
-export async function createSession(deviceId: string): Promise<Session> {
-  return request<Session>('/api/sessions', {
-    method: 'POST',
-    body: JSON.stringify({ device_id: deviceId }),
-  });
+// ---------------------------------------------------------------------------
+// Health check
+// ---------------------------------------------------------------------------
+
+/** GET / — no auth required */
+export async function healthCheck(): Promise<{ status: string; service: string }> {
+  const res = await fetch(`${BASE_URL}/`);
+  return res.json();
 }
 
-export async function endSession(sessionId: string): Promise<Session> {
-  return request<Session>(`/api/sessions/${sessionId}/end`, {
-    method: 'PATCH',
-  });
-}
+// ---------------------------------------------------------------------------
+// Sessions  —  POST/GET /sessions, POST /sessions/<id>/end
+// ---------------------------------------------------------------------------
 
-export async function getSessionHazards(sessionId: string): Promise<Hazard[]> {
-  return request<Hazard[]>(`/api/sessions/${sessionId}/hazards`);
-}
-
-export async function createHazard(payload: {
-  confidence: number;
-  bboxes: number[][];
-  labels: string[];
-  session_id: string;
-  frame_number?: number;
-}): Promise<Hazard> {
-  return request<Hazard>('/api/hazards', {
+/** POST /sessions — start a new dashcam recording session */
+export function createSession(device_id: string): Promise<Session> {
+  const payload: CreateSessionPayload = { device_id };
+  return request<Session>('/sessions', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
-export type { Session, Hazard };
+/** GET /sessions — all sessions, newest first */
+export function getSessions(): Promise<Session[]> {
+  return request<Session[]>('/sessions');
+}
+
+/** GET /sessions/<id> — fetch one session */
+export function getSession(id: string): Promise<Session> {
+  return request<Session>(`/sessions/${id}`);
+}
+
+/** POST /sessions/<id>/end — mark session as completed */
+export function endSession(id: string): Promise<{ message: string; session_id: string }> {
+  return request<{ message: string; session_id: string }>(`/sessions/${id}/end`, {
+    method: 'POST',
+  });
+}
+
+/** GET /sessions/<id>/hazards — hazards for a session, ascending by timestamp */
+export function getSessionHazards(sessionId: string): Promise<Hazard[]> {
+  return request<Hazard[]>(`/sessions/${sessionId}/hazards`);
+}
+
+// ---------------------------------------------------------------------------
+// Hazards  —  POST/GET/DELETE /hazards
+// ---------------------------------------------------------------------------
+
+/** GET /hazards — all hazards, newest first */
+export function getHazards(): Promise<Hazard[]> {
+  return request<Hazard[]>('/hazards');
+}
+
+/** GET /hazards/<id> — fetch one hazard */
+export function getHazard(id: string): Promise<Hazard> {
+  return request<Hazard>(`/hazards/${id}`);
+}
+
+/** POST /hazards — record a new hazard event (also used for manual reports) */
+export function createHazard(payload: CreateHazardPayload): Promise<Hazard> {
+  return request<Hazard>('/hazards', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+/** DELETE /hazards/<id> — permanently delete a hazard */
+export function deleteHazard(id: string): Promise<{ message: string; hazard_id: string }> {
+  return request<{ message: string; hazard_id: string }>(`/hazards/${id}`, {
+    method: 'DELETE',
+  });
+}

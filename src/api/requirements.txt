@@ -1,0 +1,12 @@
+# Flask REST API
+flask>=3.0.0
+
+# Firebase Admin SDK (auth + firestore + storage); already in database/requirements.txt
+# but listed here for completeness if installing this layer independently.
+firebase-admin>=6.2.0
+
+# Load FIREBASE_KEY_PATH and ENCRYPTION_KEY from .env
+python-dotenv>=1.0.0
+
+# Symmetric encryption for PII fields; already in database/requirements.txt
+cryptography>=42.0.0

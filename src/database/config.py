@@ -1,11 +1,14 @@
 """
 Firebase configuration and app initialization.
 
-Reads the path to the service account key from the FIREBASE_KEY_PATH
-environment variable (defaults to 'serviceAccountKey.json' in the repo root).
+Reads configuration from environment variables (or a .env file):
+    FIREBASE_KEY_PATH        — path to the service account JSON key
+                               (defaults to 'serviceAccountKey.json')
+    FIREBASE_STORAGE_BUCKET  — Firebase Storage bucket name
+                               (e.g. 'your-project.appspot.com')
 
 Usage:
-    Set FIREBASE_KEY_PATH in a .env file or in your shell before running.
+    Set variables in a .env file or in your shell before running.
     Call initialize_firebase() once at startup — safe to call multiple times.
 """
 
@@ -36,5 +39,11 @@ def initialize_firebase() -> None:
             f"serviceAccountKey.json in '{PROJECT_ROOT}'."
         )
 
-    cred = credentials.Certificate(str(resolved_key_path))
-    firebase_admin.initialize_app(cred)
+    cred = credentials.Certificate(key_path)
+
+    options = {}
+    storage_bucket = os.getenv("FIREBASE_STORAGE_BUCKET")
+    if storage_bucket:
+        options["storageBucket"] = storage_bucket
+
+    firebase_admin.initialize_app(cred, options)
