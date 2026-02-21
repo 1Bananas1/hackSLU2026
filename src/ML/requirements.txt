@@ -1,11 +1,6 @@
 # Core ML stack
 torch>=2.1.0
-torchvision>=0.16.0
-transformers>=4.38.0
-
-# Required by Florence-2's trust_remote_code modules (DaViT encoder + custom attention)
-timm>=0.9.12
-einops>=0.7.0
+ultralytics>=8.0.0
 
 # Image and video
 Pillow>=10.0.0
