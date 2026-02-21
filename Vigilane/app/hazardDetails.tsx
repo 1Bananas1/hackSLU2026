@@ -13,8 +13,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { getHazard, deleteHazard } from '../../services/api';
-import { Hazard } from '../../types';
+import { getHazard, deleteHazard } from '../services/api';
+import { Hazard } from '../types';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -46,11 +46,14 @@ function getConfidenceTag(confidence: number): { label: string; color: string } 
 // ---------------------------------------------------------------------------
 
 export default function HazardEventDetails() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id: string }>();
+  // useLocalSearchParams can return string | string[] — normalise to string
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const router = useRouter();
   const [hazard, setHazard] = useState<Hazard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -63,17 +66,23 @@ export default function HazardEventDetails() {
   }, [id]);
 
   const handleDelete = () => {
+    if (!id) return;
     Alert.alert('Delete Hazard', 'Are you sure? This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
+          setDeleting(true);
           try {
-            await deleteHazard(id!);
+            await deleteHazard(id);
+            // Go back to history — useFocusEffect there will refetch the list
             router.back();
-          } catch {
-            Alert.alert('Error', 'Could not delete hazard.');
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            Alert.alert('Delete Failed', msg);
+          } finally {
+            setDeleting(false);
           }
         },
       },
@@ -110,12 +119,12 @@ export default function HazardEventDetails() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="light-content" />
 
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.iconButton} onPress={() => router.back()}>
-          <MaterialIcons name="arrow-back-ios" size={20} color="#0f172a" style={{ marginLeft: 6 }} />
+          <MaterialIcons name="arrow-back-ios" size={20} color="#ffffff" style={{ marginLeft: 6 }} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{primaryLabel} Detected</Text>
         <View style={{ width: 40 }} />
@@ -235,7 +244,11 @@ export default function HazardEventDetails() {
             <MaterialIcons name="share" size={20} color="#ffffff" />
             <Text style={styles.primaryButtonText}>Share</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+          <TouchableOpacity
+            style={[styles.deleteButton, deleting && { opacity: 0.5 }]}
+            onPress={handleDelete}
+            disabled={deleting}
+          >
             <MaterialIcons name="delete" size={20} color="#ef4444" />
           </TouchableOpacity>
         </View>
@@ -250,9 +263,9 @@ export default function HazardEventDetails() {
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#f6f7f8' },
+  safeArea: { flex: 1, backgroundColor: '#101822' },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  errorText: { color: '#64748b', fontSize: 14, marginBottom: 16, textAlign: 'center' },
+  errorText: { color: '#94a3b8', fontSize: 14, marginBottom: 16, textAlign: 'center' },
   actionBtn: { backgroundColor: '#1973f0', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8 },
   actionBtnText: { color: '#fff', fontWeight: '600' },
   header: {
@@ -261,13 +274,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#f6f7f8',
+    backgroundColor: '#101822',
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderBottomColor: '#1e293b',
   },
   iconButton: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '700', color: '#0f172a' },
-  container: { flex: 1 },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '700', color: '#ffffff' },
+  container: { flex: 1, backgroundColor: '#101822' },
   contentContainer: { paddingBottom: 40 },
   section: { paddingHorizontal: 16, paddingTop: 16 },
   videoContainer: {
@@ -279,7 +292,7 @@ const styles = StyleSheet.create({
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.3,
     shadowRadius: 8,
   },
   videoThumbnail: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -296,8 +309,8 @@ const styles = StyleSheet.create({
   },
   timestampText: { color: '#fff', fontSize: 10, fontWeight: '600' },
   locationHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  sectionTitle: { fontSize: 12, fontWeight: '600', color: '#64748b', letterSpacing: 0.5 },
-  sectionTitleDark: { fontSize: 18, fontWeight: '700', color: '#0f172a', marginBottom: 12 },
+  sectionTitle: { fontSize: 12, fontWeight: '600', color: '#94a3b8', letterSpacing: 0.5 },
+  sectionTitleDark: { fontSize: 18, fontWeight: '700', color: '#ffffff', marginBottom: 12 },
   openMapsBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   openMapsText: { color: '#1973f0', fontSize: 12, fontWeight: '600' },
   mapContainer: {
@@ -306,7 +319,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#1e293b',
   },
   mapBackground: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   mapPinContainer: {
@@ -330,28 +343,28 @@ const styles = StyleSheet.create({
     left: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: '#1e2936',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#1e293b',
     gap: 6,
   },
-  coordText: { fontSize: 10, fontWeight: '600', color: '#0f172a' },
+  coordText: { fontSize: 10, fontWeight: '600', color: '#ffffff' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   card: {
     width: '48%',
-    backgroundColor: '#fff',
+    backgroundColor: '#1e2936',
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#1e293b',
     marginBottom: 12,
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 6 },
-  cardHeaderText: { fontSize: 10, fontWeight: '600', color: '#64748b' },
-  cardValue: { fontSize: 16, fontWeight: '700', color: '#0f172a' },
+  cardHeaderText: { fontSize: 10, fontWeight: '600', color: '#94a3b8' },
+  cardValue: { fontSize: 16, fontWeight: '700', color: '#ffffff' },
   valueRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   tag: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   tagText: { fontSize: 10, fontWeight: '600' },
@@ -361,10 +374,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderBottomColor: '#1e293b',
   },
-  bboxLabel: { fontSize: 13, fontWeight: '600', color: '#0f172a' },
-  bboxValue: { fontSize: 12, color: '#64748b', fontFamily: 'monospace' },
+  bboxLabel: { fontSize: 13, fontWeight: '600', color: '#ffffff' },
+  bboxValue: { fontSize: 12, color: '#94a3b8', fontFamily: 'monospace' },
   actionRow: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 8, gap: 12 },
   primaryButton: {
     flex: 1,

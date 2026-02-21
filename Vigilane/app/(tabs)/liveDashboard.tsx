@@ -31,6 +31,7 @@ export default function VigilaneLiveDashboard() {
   const [latestHazard, setLatestHazard] = useState<Hazard | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [reporting, setReporting] = useState(false);
+  const [sessionLoading, setSessionLoading] = useState(false);
 
   // Pulse + bounce animations
   useEffect(() => {
@@ -48,15 +49,9 @@ export default function VigilaneLiveDashboard() {
     ).start();
   }, [pulseAnim, bounceAnim]);
 
-  // Create session on mount, end it on unmount
+  // End session on unmount if one is active
   useEffect(() => {
-    let mounted = true;
-    createSession(DEVICE_ID)
-      .then((s) => { if (mounted) setSession(s); })
-      .catch(() => { /* session creation failed — continue without one */ });
     return () => {
-      mounted = false;
-      // endSession is best-effort; don't await
       setSession((s) => {
         if (s) endSession(s.id).catch(() => {});
         return null;
@@ -64,11 +59,32 @@ export default function VigilaneLiveDashboard() {
     };
   }, []);
 
-  // Recording timer
+  // Recording timer — only ticks while a session is active
   useEffect(() => {
+    if (!session) return;
     const timer = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [session]);
+
+  const handleToggleSession = async () => {
+    if (sessionLoading) return;
+    setSessionLoading(true);
+    try {
+      if (session) {
+        await endSession(session.id);
+        setSession(null);
+        setLatestHazard(null);
+        setElapsedSeconds(0);
+      } else {
+        const s = await createSession(DEVICE_ID);
+        setSession(s);
+      }
+    } catch (err) {
+      console.error('Session toggle failed:', err);
+    } finally {
+      setSessionLoading(false);
+    }
+  };
 
   // Poll session hazards for live detection
   const pollHazards = useCallback(async () => {
@@ -94,15 +110,19 @@ export default function VigilaneLiveDashboard() {
     if (reporting || !session) return;
     setReporting(true);
     try {
-      await createHazard({
+      const newHazard = await createHazard({
         session_id: session.id,
         confidence: 1.0,
         labels: ['manual'],
         bboxes: [],
         frame_number: 0,
       });
-    } catch {
-      // TODO: show toast on error
+      // Immediately show the newly-created hazard in the UI
+      setLatestHazard(newHazard);
+      // Re-poll so the hazard list stays in sync
+      await pollHazards();
+    } catch (err) {
+      console.error('Report hazard failed:', err);
     } finally {
       setReporting(false);
     }
@@ -137,14 +157,20 @@ export default function VigilaneLiveDashboard() {
           <View style={styles.glassPanel}>
             <MaterialIcons name="verified-user" size={20} color={session ? '#34d399' : '#94a3b8'} />
             <View style={styles.statusTextContainer}>
-              <Text style={styles.statusTitle}>Vigilane Active</Text>
-              <Text style={styles.statusSubtitle}>{session ? 'SESSION LIVE' : 'CONNECTING…'}</Text>
+              <Text style={styles.statusTitle}>Vigilane</Text>
+              <Text style={styles.statusSubtitle}>{session ? 'SESSION LIVE' : 'NO ACTIVE SESSION'}</Text>
             </View>
           </View>
 
           <View style={[styles.glassPanel, styles.recPanel]}>
-            <Animated.View style={[styles.pulsingDot, { transform: [{ scale: pulseAnim }] }]} />
-            <Text style={styles.recText}>REC {formatElapsed(elapsedSeconds)}</Text>
+            {session ? (
+              <>
+                <Animated.View style={[styles.pulsingDot, { transform: [{ scale: pulseAnim }] }]} />
+                <Text style={styles.recText}>REC {formatElapsed(elapsedSeconds)}</Text>
+              </>
+            ) : (
+              <Text style={styles.recText}>STANDBY</Text>
+            )}
           </View>
         </View>
 
@@ -179,10 +205,25 @@ export default function VigilaneLiveDashboard() {
           )}
 
           <View style={styles.dashGrid}>
-            <View style={styles.speedWidget}>
-              <Text style={styles.speedNumber}>65</Text>
-              <Text style={styles.speedUnit}>MPH</Text>
-            </View>
+            <TouchableOpacity
+              style={[
+                styles.sessionButton,
+                session ? styles.sessionButtonStop : styles.sessionButtonStart,
+                sessionLoading && styles.reportButtonDisabled,
+              ]}
+              activeOpacity={0.8}
+              onPress={handleToggleSession}
+              disabled={sessionLoading}
+            >
+              <MaterialIcons
+                name={session ? 'stop-circle' : 'play-circle-filled'}
+                size={28}
+                color="#fff"
+              />
+              <Text style={styles.reportButtonText}>
+                {sessionLoading ? '…' : session ? 'Stop' : 'Start'}
+              </Text>
+            </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.reportButton, (reporting || !session) && styles.reportButtonDisabled]}
@@ -295,6 +336,33 @@ const styles = StyleSheet.create({
   },
   speedNumber: { color: '#fff', fontSize: 40, fontWeight: '900', lineHeight: 40 },
   speedUnit: { color: '#94a3b8', fontSize: 12, fontWeight: '700', letterSpacing: 2, marginTop: 4 },
+  sessionButton: {
+    width: 88,
+    height: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 32,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    elevation: 8,
+    marginBottom: 16,
+  },
+  sessionButtonStart: {
+    backgroundColor: '#16a34a',
+    shadowColor: '#16a34a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+  },
+  sessionButtonStop: {
+    backgroundColor: '#dc2626',
+    shadowColor: '#dc2626',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+  },
   reportButton: {
     flex: 1,
     height: 64,
