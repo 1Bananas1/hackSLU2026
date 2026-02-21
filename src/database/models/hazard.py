@@ -28,6 +28,9 @@ class Hazard:
     photo_url: Optional[str] = None
     location: Optional[Dict[str, float]] = None  # {"lat": ..., "lng": ...}
     status: str = "pending"  # "pending" | "reported" | "dismissed"
+    labels: Optional[list] = None  # e.g. ["pothole"]
+    bboxes: Optional[list] = None  # e.g. [{"x1":0,"y1":0,"x2":1,"y2":1}]
+    frame_number: int = 0
     id: Optional[str] = None  # populated after Firestore write
 
     def to_dict(self) -> dict:
@@ -40,18 +43,25 @@ class Hazard:
             "photo_url": self.photo_url,
             "location": self.location,
             "status": self.status,
+            "labels": self.labels or [self.event_type],
+            "bboxes": self.bboxes or [],
+            "frame_number": self.frame_number,
         }
 
     @classmethod
     def from_dict(cls, data: dict, doc_id: Optional[str] = None) -> "Hazard":
         """Deserialize from a Firestore document dict."""
+        labels = data.get("labels") or []
         return cls(
             session_id=data["session_id"],
-            event_type=data["event_type"],
+            event_type=data.get("event_type") or (labels[0] if labels else "unknown"),
             confidence=data["confidence"],
             timestamp=data.get("timestamp", datetime.now(timezone.utc)),
             photo_url=data.get("photo_url"),
             location=data.get("location"),
             status=data.get("status", "pending"),
+            labels=labels,
+            bboxes=data.get("bboxes", []),
+            frame_number=data.get("frame_number", 0),
             id=doc_id,
         )

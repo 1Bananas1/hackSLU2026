@@ -39,7 +39,7 @@ def initialize_firebase() -> None:
             f"serviceAccountKey.json in '{PROJECT_ROOT}'."
         )
 
-    cred = credentials.Certificate(key_path)
+    cred = credentials.Certificate(str(resolved_key_path))
 
     options = {}
     storage_bucket = os.getenv("FIREBASE_STORAGE_BUCKET")
