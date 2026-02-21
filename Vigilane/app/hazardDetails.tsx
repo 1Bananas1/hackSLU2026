@@ -8,13 +8,13 @@ import {
   ImageBackground,
   StatusBar,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { getHazard, deleteHazard } from '../services/api';
 import { Hazard } from '../types';
+import { Toast, useToast } from '../components/toast';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -54,6 +54,8 @@ export default function HazardEventDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const { toast, showToast } = useToast();
 
   useEffect(() => {
     if (!id) return;
@@ -65,28 +67,30 @@ export default function HazardEventDetails() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  const handleDelete = () => {
-    if (!id) return;
-    Alert.alert('Delete Hazard', 'Are you sure? This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          setDeleting(true);
-          try {
-            await deleteHazard(id);
-            // Go back to history — useFocusEffect there will refetch the list
-            router.back();
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            Alert.alert('Delete Failed', msg);
-          } finally {
-            setDeleting(false);
-          }
-        },
-      },
-    ]);
+  const handleDelete = async () => {
+    if (!id || deleting) return;
+    if (!confirmDelete) {
+      // First tap: ask for confirmation
+      setConfirmDelete(true);
+      return;
+    }
+    // Second tap: actually delete
+    setDeleting(true);
+    try {
+      console.log('[DELETE] Deleting hazard id:', id);
+      await deleteHazard(id);
+      console.log('[DELETE] Success, navigating back');
+      showToast('Hazard deleted', 'success');
+      setTimeout(() => router.replace('/(tabs)/hazardHistory'), 900);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[DELETE] Failed:', msg);
+      showToast(`Delete failed: ${msg}`, 'error');
+      setError(`Delete failed: ${msg}`);
+      setConfirmDelete(false);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   if (loading) {
@@ -99,11 +103,24 @@ export default function HazardEventDetails() {
     );
   }
 
-  if (error || !hazard) {
+  if (error && !hazard) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.centered}>
-          <Text style={styles.errorText}>{error ?? 'Hazard not found.'}</Text>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => router.back()}>
+            <Text style={styles.actionBtnText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!hazard) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>Hazard not found.</Text>
           <TouchableOpacity style={styles.actionBtn} onPress={() => router.back()}>
             <Text style={styles.actionBtnText}>Go Back</Text>
           </TouchableOpacity>
@@ -119,6 +136,7 @@ export default function HazardEventDetails() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <Toast {...toast} />
       <StatusBar barStyle="light-content" />
 
       {/* Header */}
@@ -238,22 +256,29 @@ export default function HazardEventDetails() {
           </View>
         )}
 
-        {/* Action Buttons */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.primaryButton}>
-            <MaterialIcons name="share" size={20} color="#ffffff" />
-            <Text style={styles.primaryButtonText}>Share</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.deleteButton, deleting && { opacity: 0.5 }]}
-            onPress={handleDelete}
-            disabled={deleting}
-          >
-            <MaterialIcons name="delete" size={20} color="#ef4444" />
-          </TouchableOpacity>
-        </View>
-
       </ScrollView>
+
+      {/* Delete bar — fixed at bottom */}
+      <View style={styles.deleteBar}>
+        {error ? (
+          <Text style={styles.deleteErrorText}>{error}</Text>
+        ) : null}
+        <TouchableOpacity
+          style={[
+            styles.deleteBarButton,
+            confirmDelete && styles.deleteBarButtonConfirm,
+            deleting && { opacity: 0.5 },
+          ]}
+          onPress={handleDelete}
+          disabled={deleting}
+        >
+          <MaterialIcons name="delete" size={22} color="#fff" />
+          <Text style={styles.deleteBarText}>
+            {deleting ? 'Deleting…' : confirmDelete ? 'Tap again to confirm' : 'Delete Hazard'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
     </SafeAreaView>
   );
 }
@@ -378,25 +403,31 @@ const styles = StyleSheet.create({
   },
   bboxLabel: { fontSize: 13, fontWeight: '600', color: '#ffffff' },
   bboxValue: { fontSize: 12, color: '#94a3b8', fontFamily: 'monospace' },
-  actionRow: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 8, gap: 12 },
-  primaryButton: {
-    flex: 1,
-    backgroundColor: '#1973f0',
+  deleteBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#1e293b',
+    backgroundColor: '#101822',
+  },
+  deleteErrorText: {
+    color: '#f87171',
+    fontSize: 12,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  deleteBarButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
+    backgroundColor: '#dc2626',
+    paddingVertical: 16,
+    borderRadius: 14,
     gap: 8,
   },
-  primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  deleteButton: {
-    width: 52,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.2)',
+  deleteBarButtonConfirm: {
+    backgroundColor: '#b91c1c',
   },
+  deleteBarText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

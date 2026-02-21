@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { createSession, endSession, getSessionHazards, createHazard } from '../../services/api';
 import { Hazard, Session } from '../../types';
+import { Toast, useToast } from '../../components/toast';
 
 const DEVICE_ID = 'dashcam_0';
 const POLL_INTERVAL_MS = 3000;
@@ -32,6 +33,7 @@ export default function VigilaneLiveDashboard() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [reporting, setReporting] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
+  const { toast, showToast } = useToast();
 
   // Pulse + bounce animations
   useEffect(() => {
@@ -75,12 +77,15 @@ export default function VigilaneLiveDashboard() {
         setSession(null);
         setLatestHazard(null);
         setElapsedSeconds(0);
+        showToast('Session ended', 'info');
       } else {
         const s = await createSession(DEVICE_ID);
         setSession(s);
+        showToast('Session started', 'success');
       }
     } catch (err) {
       console.error('Session toggle failed:', err);
+      showToast('Session error — check connection', 'error');
     } finally {
       setSessionLoading(false);
     }
@@ -121,8 +126,10 @@ export default function VigilaneLiveDashboard() {
       setLatestHazard(newHazard);
       // Re-poll so the hazard list stays in sync
       await pollHazards();
+      showToast('Hazard reported!', 'success');
     } catch (err) {
       console.error('Report hazard failed:', err);
+      showToast('Failed to report hazard', 'error');
     } finally {
       setReporting(false);
     }
@@ -141,6 +148,8 @@ export default function VigilaneLiveDashboard() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+
+      <Toast {...toast} />
 
       <ImageBackground
         source={{ uri: 'https://images.unsplash.com/photo-1600030230325-188b89d4fb98?w=800&q=80' }}

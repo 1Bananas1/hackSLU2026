@@ -14,8 +14,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
-import { getHazards, deleteHazard } from '../../services/api';
+import { useFocusEffect } from 'expo-router';
+import { getHazards } from '../../services/api';
 import { Hazard } from '../../types';
 
 // ---------------------------------------------------------------------------
