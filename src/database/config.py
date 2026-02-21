@@ -8,24 +8,35 @@ Reads configuration from environment variables (or a .env file):
                                (e.g. 'your-project.appspot.com')
 
 Usage:
-    Set variables in a .env file or in your shell before running.
     Call initialize_firebase() once at startup — safe to call multiple times.
 """
 
 import os
 from pathlib import Path
 
-import firebase_admin
-from dotenv import load_dotenv
-from firebase_admin import credentials
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-load_dotenv(PROJECT_ROOT / ".env")
-load_dotenv()
+
+# Optional: load .env if python-dotenv is installed
+try:
+    from dotenv import load_dotenv  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover
+    load_dotenv = None
+
+if load_dotenv:
+    load_dotenv(PROJECT_ROOT / ".env")
+    load_dotenv()
 
 
 def initialize_firebase() -> None:
     """Initialize the Firebase Admin SDK (no-op if already initialized)."""
+    try:
+        import firebase_admin  # type: ignore
+        from firebase_admin import credentials  # type: ignore
+    except ModuleNotFoundError as exc:  # pragma: no cover
+        raise RuntimeError(
+            "firebase_admin is not installed. Install firebase-admin to use Firebase."
+        ) from exc
+
     if firebase_admin._apps:
         return
 

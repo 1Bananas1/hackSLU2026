@@ -99,7 +99,7 @@ def create_hazard():
     hazard_id = save_hazard(hazard)
     increment_hazard_count(session_id)
 
-    return jsonify({"id": hazard_id, **_hazard_to_json(hazard)}), 201
+    return jsonify({**_hazard_to_json(hazard), "id": hazard_id}), 201
 
 
 @hazards_bp.get("/hazards")
