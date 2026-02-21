@@ -1,0 +1,299 @@
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  StatusBar,
+  Platform,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialIcons } from '@expo/vector-icons';
+import * as Google from 'expo-auth-session/providers/google';
+import {
+  GoogleAuthProvider,
+  signInWithCredential,
+  signInWithPopup,
+} from 'firebase/auth';
+import { makeRedirectUri } from 'expo-auth-session';
+import { auth } from '@/services/firebase';
+
+// ---------------------------------------------------------------------------
+// Design tokens (matches the rest of the app)
+// ---------------------------------------------------------------------------
+
+const colors = {
+  background:   '#101822',
+  surface:      '#1a2432',
+  primary:      '#1973f0',
+  primaryLight: 'rgba(25, 115, 240, 0.15)',
+  textPrimary:  '#ffffff',
+  textSecondary:'#94a3b8',
+  textMuted:    '#64748b',
+  border:       '#1e293b',
+  danger:       '#ef4444',
+};
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export default function LoginScreen() {
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [signingIn, setSigningIn] = useState(false);
+
+  // ── expo-auth-session (native only) ─────────────────────────────────────
+  // Must be called unconditionally (Rules of Hooks).
+  // On web we always use signInWithPopup instead, but we still need to call
+  // the hook — pass webClientId so the internal invariant doesn't throw.
+  const redirectUri = makeRedirectUri({ scheme: 'vigilane', preferLocalhost: true });
+  const [, response, promptAsync] = Google.useAuthRequest({
+    webClientId:     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '',
+    iosClientId:     process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+    redirectUri,
+  });
+
+  // Native: handle the OAuth callback
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    if (response?.type === 'success') {
+      const idToken = response.params.id_token;
+      if (!idToken) {
+        setAuthError('Google did not return an ID token. Check your OAuth client IDs.');
+        setSigningIn(false);
+        return;
+      }
+      const credential = GoogleAuthProvider.credential(idToken);
+      signInWithCredential(auth, credential).catch((err: Error) => {
+        setAuthError(err.message);
+        setSigningIn(false);
+      });
+    } else if (response?.type === 'error') {
+      setAuthError(response.error?.message ?? 'Google sign-in failed.');
+      setSigningIn(false);
+    } else if (response?.type === 'cancel' || response?.type === 'dismiss') {
+      setSigningIn(false);
+    }
+  }, [response]);
+
+  const handleSignIn = async () => {
+    setAuthError(null);
+    setSigningIn(true);
+    try {
+      if (Platform.OS === 'web') {
+        // Web: popup — no page redirect, no race condition with the auth guard
+        const provider = new GoogleAuthProvider();
+        await signInWithPopup(auth, provider);
+        // onAuthStateChanged in AuthContext will fire → AuthGuard redirects to app
+      } else {
+        // Native: expo-auth-session OAuth flow
+        await promptAsync();
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Sign-in failed.';
+      setAuthError(msg);
+      setSigningIn(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="light-content" backgroundColor={colors.background} />
+
+      {/* ── Branding ──────────────────────────────────────────────────────── */}
+      <View style={styles.brandingContainer}>
+        <View style={styles.logoCircle}>
+          <MaterialIcons name="visibility" size={48} color={colors.primary} />
+        </View>
+        <Text style={styles.appName}>Vigilane</Text>
+        <Text style={styles.tagline}>AI-powered road hazard detection</Text>
+      </View>
+
+      {/* ── Feature bullets ───────────────────────────────────────────────── */}
+      <View style={styles.featuresContainer}>
+        <FeatureLine icon="videocam"      text="Real-time dashcam hazard detection" />
+        <FeatureLine icon="notifications" text="Instant audio & visual alerts" />
+        <FeatureLine icon="history"       text="Searchable incident history" />
+        <FeatureLine icon="security"      text="Auto-report to local authorities" />
+      </View>
+
+      {/* ── Sign-in card ──────────────────────────────────────────────────── */}
+      <View style={styles.signInCard}>
+        <Text style={styles.signInHeading}>Get started</Text>
+        <Text style={styles.signInSubtext}>
+          Sign in to sync your settings and report history across devices.
+        </Text>
+
+        {authError && (
+          <View style={styles.errorBox}>
+            <MaterialIcons name="error-outline" size={16} color={colors.danger} />
+            <Text style={styles.errorText}>{authError}</Text>
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={[styles.googleButton, signingIn && styles.googleButtonDisabled]}
+          onPress={handleSignIn}
+          disabled={signingIn}
+          activeOpacity={0.8}
+        >
+          {signingIn ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <MaterialIcons name="g-mobiledata" size={22} color={colors.primary} />
+          )}
+          <Text style={styles.googleButtonText}>
+            {signingIn ? 'Signing in…' : 'Continue with Google'}
+          </Text>
+        </TouchableOpacity>
+
+        <Text style={styles.disclaimer}>
+          By continuing you agree to our Terms of Service and Privacy Policy.
+        </Text>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sub-component
+// ---------------------------------------------------------------------------
+
+function FeatureLine({ icon, text }: { icon: keyof typeof MaterialIcons.glyphMap; text: string }) {
+  return (
+    <View style={styles.featureLine}>
+      <View style={styles.featureIconWrap}>
+        <MaterialIcons name={icon} size={18} color={colors.primary} />
+      </View>
+      <Text style={styles.featureText}>{text}</Text>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingVertical: 32,
+  },
+
+  // Branding
+  brandingContainer: { alignItems: 'center', marginTop: 24 },
+  logoCircle: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(25, 115, 240, 0.3)',
+  },
+  appName: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    letterSpacing: -0.5,
+  },
+  tagline: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    marginTop: 6,
+    textAlign: 'center',
+  },
+
+  // Features
+  featuresContainer: {
+    gap: 14,
+    paddingVertical: 8,
+  },
+  featureLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  featureIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  featureText: {
+    fontSize: 15,
+    color: colors.textPrimary,
+    fontWeight: '500',
+    flex: 1,
+  },
+
+  // Sign-in card
+  signInCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 24,
+    gap: 14,
+  },
+  signInHeading: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  signInSubtext: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 19,
+  },
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: 'rgba(239,68,68,0.1)',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.25)',
+  },
+  errorText: {
+    color: colors.danger,
+    fontSize: 13,
+    flex: 1,
+    lineHeight: 18,
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: colors.primaryLight,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(25, 115, 240, 0.4)',
+    paddingVertical: 14,
+  },
+  googleButtonDisabled: {
+    opacity: 0.5,
+  },
+  googleButtonText: {
+    color: colors.primary,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  disclaimer: {
+    fontSize: 11,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+});
