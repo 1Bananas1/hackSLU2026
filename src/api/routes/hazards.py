@@ -5,14 +5,15 @@ All endpoints require a valid Firebase ID token
 (Authorization: Bearer <token>).
 
 Endpoints:
-    POST   /hazards                         — record a new hazard
-    GET    /hazards                         — list all hazards (newest first)
-    GET    /hazards/<id>                    — fetch one hazard
-    DELETE /hazards/<id>                    — delete a hazard
-    GET    /sessions/<id>/hazards           — hazards for a session (asc by time)
+    POST   /hazards                     — record a new hazard
+    GET    /hazards                     — list all hazards (newest first)
+    GET    /hazards/<id>                — fetch one hazard
+    DELETE /hazards/<id>                — delete a hazard
+    POST   /hazards/<id>/report         — submit a formal city report (encrypts PII)
+    GET    /sessions/<id>/hazards       — hazards for a session (asc by time)
 """
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from src.api.auth import require_auth
 from src.database.models.hazard import Hazard
@@ -22,11 +23,13 @@ from src.database.services.hazard_service import (
     get_hazard,
     get_hazards_by_session,
     save_hazard,
+    update_hazard_status,
 )
 from src.database.services.session_service import (
     get_session,
     increment_hazard_count,
 )
+from src.database.services.report_service import create_report
 
 hazards_bp = Blueprint("hazards", __name__)
 
@@ -39,16 +42,17 @@ def create_hazard():
 
     Body (JSON):
     {
-        "session_id":   "abc123",
-        "confidence":   0.85,
-        "labels":       ["pothole"],
-        "bboxes":       [{"x1": 120, "y1": 200, "x2": 300, "y2": 380}],
-        "frame_number": 50        (optional, defaults to 0)
+        "session_id":  "abc123",
+        "event_type":  "pothole",
+        "confidence":  0.85,
+        "photo_url":   "https://storage.googleapis.com/...",  (optional)
+        "location":    {"lat": 38.627, "lng": -90.199},       (optional)
+        "status":      "pending"                              (optional, default "pending")
     }
     """
     data = request.get_json(silent=True) or {}
 
-    required = ("session_id", "confidence", "labels", "bboxes")
+    required = ("session_id", "event_type", "confidence")
     missing = [k for k in required if k not in data]
     if missing:
         return jsonify({"error": f"Missing required fields: {missing}"}), 400
@@ -59,10 +63,11 @@ def create_hazard():
 
     hazard = Hazard(
         session_id=session_id,
+        event_type=data["event_type"],
         confidence=float(data["confidence"]),
-        labels=data["labels"],
-        bboxes=data["bboxes"],
-        frame_number=int(data.get("frame_number", 0)),
+        photo_url=data.get("photo_url"),
+        location=data.get("location"),
+        status=data.get("status", "pending"),
     )
 
     hazard_id = save_hazard(hazard)
@@ -99,6 +104,53 @@ def remove_hazard(hazard_id: str):
     return jsonify({"message": "Hazard deleted", "hazard_id": hazard_id})
 
 
+@hazards_bp.post("/hazards/<hazard_id>/report")
+@require_auth
+def report_hazard(hazard_id: str):
+    """
+    Submit a formal city report for a hazard.
+
+    Encrypts all PII (name, email, phone) with Fernet before writing to Firestore.
+    Transitions the hazard status from "pending" -> "reported".
+
+    Body (JSON):
+    {
+        "reporter_name":  "Jane Doe",
+        "reporter_email": "jane@example.com",
+        "reporter_phone": "+1-314-555-0199"   (optional)
+    }
+    """
+    hazard = get_hazard(hazard_id)
+    if hazard is None:
+        return jsonify({"error": "Hazard not found"}), 404
+    if hazard.status == "dismissed":
+        return jsonify({"error": "Cannot report a dismissed hazard"}), 409
+    if hazard.status == "reported":
+        return jsonify({"error": "Hazard has already been reported"}), 409
+
+    data = request.get_json(silent=True) or {}
+    required = ("reporter_name", "reporter_email")
+    missing = [k for k in required if k not in data]
+    if missing:
+        return jsonify({"error": f"Missing required fields: {missing}"}), 400
+
+    report_id = create_report(
+        hazard_id=hazard_id,
+        submitted_by_uid=g.user["uid"],
+        reporter_name=data["reporter_name"],
+        reporter_email=data["reporter_email"],
+        reporter_phone=data.get("reporter_phone"),
+    )
+
+    update_hazard_status(hazard_id, "reported")
+
+    return jsonify({
+        "message": "Report submitted",
+        "report_id": report_id,
+        "hazard_id": hazard_id,
+    }), 201
+
+
 @hazards_bp.get("/sessions/<session_id>/hazards")
 @require_auth
 def list_hazards_for_session(session_id: str):
@@ -117,9 +169,10 @@ def _hazard_to_json(hazard) -> dict:
     return {
         "id": hazard.id,
         "session_id": hazard.session_id,
+        "event_type": hazard.event_type,
         "confidence": hazard.confidence,
-        "labels": hazard.labels,
-        "bboxes": hazard.bboxes,
-        "frame_number": hazard.frame_number,
         "timestamp": hazard.timestamp.isoformat() if hazard.timestamp else None,
+        "photo_url": hazard.photo_url,
+        "location": hazard.location,
+        "status": hazard.status,
     }
