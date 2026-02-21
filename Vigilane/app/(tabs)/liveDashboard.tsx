@@ -1,23 +1,37 @@
-import React, { useEffect, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  ImageBackground, 
-  SafeAreaView, 
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ImageBackground,
   StatusBar,
-  Animated
+  Animated,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import { getLiveDetection, reportHazard } from '../../services/api';
+import { LiveDetection } from '../../types';
+
+const POLL_INTERVAL_MS = 3000;
+
+function formatElapsed(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  return [h, m, s].map((v) => String(v).padStart(2, '0')).join(':');
+}
 
 export default function VigilaneLiveDashboard() {
-  // Animations
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const bounceAnim = useRef(new Animated.Value(0)).current;
 
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [detection, setDetection] = useState<LiveDetection | null>(null);
+  const [reporting, setReporting] = useState(false);
+
+  // Pulsing dot + bounce animations
   useEffect(() => {
-    // Pulsing red dot animation
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.2, duration: 800, useNativeDriver: true }),
@@ -25,7 +39,6 @@ export default function VigilaneLiveDashboard() {
       ])
     ).start();
 
-    // Bouncing alert banner animation
     Animated.loop(
       Animated.sequence([
         Animated.timing(bounceAnim, { toValue: -8, duration: 600, useNativeDriver: true }),
@@ -34,25 +47,67 @@ export default function VigilaneLiveDashboard() {
     ).start();
   }, [pulseAnim, bounceAnim]);
 
+  // Recording timer
+  useEffect(() => {
+    const timer = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Live detection polling
+  const pollDetection = useCallback(async () => {
+    try {
+      const data = await getLiveDetection();
+      setDetection(data);
+    } catch {
+      // Silently ignore poll failures — don't interrupt the UI
+    }
+  }, []);
+
+  useEffect(() => {
+    pollDetection();
+    const interval = setInterval(pollDetection, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [pollDetection]);
+
+  const handleReportHazard = async () => {
+    if (reporting) return;
+    setReporting(true);
+    try {
+      await reportHazard({
+        type: detection?.hazardType ?? 'unknown',
+        location: 'Current location',
+        latitude: 0,
+        longitude: 0,
+        vehicleSpeed: 0,
+        gForce: 0,
+      });
+    } catch {
+      // TODO: show toast on error
+    } finally {
+      setReporting(false);
+    }
+  };
+
+  const alertLabel = detection?.isActive
+    ? `${detection.hazardType.charAt(0).toUpperCase() + detection.hazardType.slice(1)} on ${detection.lane} • ${detection.distanceFt}ft`
+    : null;
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-      
-      {/* Video Background Feed (Placeholder) */}
-      <ImageBackground 
-        source={{ uri: 'https://images.unsplash.com/photo-1600030230325-188b89d4fb98?w=800&q=80' }} 
+
+      <ImageBackground
+        source={{ uri: 'https://images.unsplash.com/photo-1600030230325-188b89d4fb98?w=800&q=80' }}
         style={StyleSheet.absoluteFillObject}
         resizeMode="cover"
       >
-        {/* Darkening Overlay for text readability */}
         <View style={styles.overlay} />
       </ImageBackground>
 
       <SafeAreaView style={styles.safeArea}>
-        
-        {/* Top Bar: Status & Recording */}
+
+        {/* Top Bar */}
         <View style={styles.topBar}>
-          {/* System Status */}
           <View style={styles.glassPanel}>
             <MaterialIcons name="verified-user" size={20} color="#34d399" />
             <View style={styles.statusTextContainer}>
@@ -61,64 +116,60 @@ export default function VigilaneLiveDashboard() {
             </View>
           </View>
 
-          {/* Recording Indicator */}
           <View style={[styles.glassPanel, styles.recPanel]}>
             <Animated.View style={[styles.pulsingDot, { transform: [{ scale: pulseAnim }] }]} />
-            <Text style={styles.recText}>REC 00:14:32</Text>
+            <Text style={styles.recText}>REC {formatElapsed(elapsedSeconds)}</Text>
           </View>
         </View>
 
-        {/* AR Layer (Absolute Positioning relative to full screen) */}
-        <View style={styles.arLayer}>
-          {/* Example Hazard Box: Pothole */}
-          <View style={[styles.arBox, { top: '40%', left: '30%' }]}>
-            <View style={styles.arBadge}>
-              <MaterialIcons name="warning" size={12} color="#000" />
-              <Text style={styles.arBadgeText}>POTHOLE</Text>
-            </View>
-            <Text style={styles.arDistance}>50ft</Text>
-          </View>
-
-          {/* Example Hazard Box: Debris */}
-          <View style={[styles.arBoxGhost, { top: '35%', right: '25%' }]}>
-            <View style={styles.arBadgeGhost}>
-              <Text style={styles.arBadgeGhostText}>Unknown</Text>
+        {/* AR Detection Layer */}
+        {detection?.isActive && (
+          <View style={styles.arLayer}>
+            <View style={[styles.arBox, { top: '40%', left: '30%' }]}>
+              <View style={styles.arBadge}>
+                <MaterialIcons name="warning" size={12} color="#000" />
+                <Text style={styles.arBadgeText}>{detection.hazardType.toUpperCase()}</Text>
+              </View>
+              <Text style={styles.arDistance}>{detection.distanceFt}ft</Text>
             </View>
           </View>
-        </View>
+        )}
 
-        {/* Spacer to push bottom content down */}
         <View style={styles.flexSpacer} />
 
-        {/* Bottom Dashboard Overlay */}
+        {/* Bottom Dashboard */}
         <View style={styles.bottomOverlay}>
-          
-          {/* Alert Banner (Animated) */}
-          <Animated.View style={[styles.alertBannerContainer, { transform: [{ translateY: bounceAnim }] }]}>
-            <View style={styles.alertBanner}>
-              <MaterialIcons name="report-problem" size={28} color="#0f172a" />
-              <View style={styles.alertTextContainer}>
-                <Text style={styles.alertTitle}>Hazard Detected Ahead</Text>
-                <Text style={styles.alertSubtitle}>Pothole on right lane • 50ft</Text>
-              </View>
-            </View>
-          </Animated.View>
 
-          {/* Dashboard Grid */}
+          {/* Alert Banner — only shown when detection is active */}
+          {alertLabel && (
+            <Animated.View style={[styles.alertBannerContainer, { transform: [{ translateY: bounceAnim }] }]}>
+              <View style={styles.alertBanner}>
+                <MaterialIcons name="report-problem" size={28} color="#0f172a" />
+                <View style={styles.alertTextContainer}>
+                  <Text style={styles.alertTitle}>Hazard Detected Ahead</Text>
+                  <Text style={styles.alertSubtitle}>{alertLabel}</Text>
+                </View>
+              </View>
+            </Animated.View>
+          )}
+
           <View style={styles.dashGrid}>
-            
-            {/* Speedometer */}
             <View style={styles.speedWidget}>
               <Text style={styles.speedNumber}>65</Text>
               <Text style={styles.speedUnit}>MPH</Text>
             </View>
 
-            {/* Manual Report Button */}
-            <TouchableOpacity style={styles.reportButton} activeOpacity={0.8}>
+            <TouchableOpacity
+              style={[styles.reportButton, reporting && styles.reportButtonDisabled]}
+              activeOpacity={0.8}
+              onPress={handleReportHazard}
+              disabled={reporting}
+            >
               <MaterialIcons name="add-alert" size={28} color="#fff" />
-              <Text style={styles.reportButtonText}>Report Hazard</Text>
+              <Text style={styles.reportButtonText}>
+                {reporting ? 'Reporting…' : 'Report Hazard'}
+              </Text>
             </TouchableOpacity>
-            
           </View>
         </View>
 
@@ -128,17 +179,9 @@ export default function VigilaneLiveDashboard() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0f172a',
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.4)', // Faking the vignette gradient
-  },
-  safeArea: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: '#0f172a' },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
+  safeArea: { flex: 1 },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -157,41 +200,13 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.1)',
     gap: 8,
   },
-  statusTextContainer: {
-    justifyContent: 'center',
-  },
-  statusTitle: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  statusSubtitle: {
-    color: '#94a3b8',
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 1,
-  },
-  recPanel: {
-    gap: 6,
-  },
-  pulsingDot: {
-    width: 12,
-    height: 12,
-    backgroundColor: '#ef4444',
-    borderRadius: 6,
-  },
-  recText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    fontFamily: 'monospace',
-    letterSpacing: 1,
-  },
-  arLayer: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 10,
-    pointerEvents: 'none',
-  },
+  statusTextContainer: { justifyContent: 'center' },
+  statusTitle: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  statusSubtitle: { color: '#94a3b8', fontSize: 10, fontWeight: '600', letterSpacing: 1 },
+  recPanel: { gap: 6 },
+  pulsingDot: { width: 12, height: 12, backgroundColor: '#ef4444', borderRadius: 6 },
+  recText: { color: '#fff', fontSize: 12, fontWeight: '600', fontFamily: 'monospace', letterSpacing: 1 },
+  arLayer: { ...StyleSheet.absoluteFillObject, zIndex: 10, pointerEvents: 'none' },
   arBox: {
     position: 'absolute',
     width: 120,
@@ -213,11 +228,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 8,
     gap: 4,
   },
-  arBadgeText: {
-    color: '#000',
-    fontSize: 10,
-    fontWeight: '700',
-  },
+  arBadgeText: { color: '#000', fontSize: 10, fontWeight: '700' },
   arDistance: {
     color: '#f59e0b',
     fontSize: 10,
@@ -227,41 +238,9 @@ const styles = StyleSheet.create({
     paddingRight: 6,
     paddingBottom: 4,
   },
-  arBoxGhost: {
-    position: 'absolute',
-    width: 80,
-    height: 60,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 6,
-  },
-  arBadgeGhost: {
-    backgroundColor: '#334155',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderTopLeftRadius: 5,
-    borderBottomRightRadius: 6,
-  },
-  arBadgeGhostText: {
-    color: '#fff',
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  flexSpacer: {
-    flex: 1,
-  },
-  bottomOverlay: {
-    paddingHorizontal: 16,
-    paddingBottom: 20,
-    gap: 16,
-    zIndex: 20,
-  },
-  alertBannerContainer: {
-    alignItems: 'center',
-    width: '100%',
-  },
+  flexSpacer: { flex: 1 },
+  bottomOverlay: { paddingHorizontal: 16, paddingBottom: 20, gap: 16, zIndex: 20 },
+  alertBannerContainer: { alignItems: 'center', width: '100%' },
   alertBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -275,24 +254,10 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 400,
   },
-  alertTextContainer: {
-    flex: 1,
-  },
-  alertTitle: {
-    color: '#0f172a',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  alertSubtitle: {
-    color: '#334155',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  dashGrid: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 12,
-  },
+  alertTextContainer: { flex: 1 },
+  alertTitle: { color: '#0f172a', fontSize: 14, fontWeight: '700' },
+  alertSubtitle: { color: '#334155', fontSize: 12, fontWeight: '600' },
+  dashGrid: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
   speedWidget: {
     width: 100,
     height: 100,
@@ -303,19 +268,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  speedNumber: {
-    color: '#fff',
-    fontSize: 40,
-    fontWeight: '900',
-    lineHeight: 40,
-  },
-  speedUnit: {
-    color: '#94a3b8',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 2,
-    marginTop: 4,
-  },
+  speedNumber: { color: '#fff', fontSize: 40, fontWeight: '900', lineHeight: 40 },
+  speedUnit: { color: '#94a3b8', fontSize: 12, fontWeight: '700', letterSpacing: 2, marginTop: 4 },
   reportButton: {
     flex: 1,
     height: 64,
@@ -332,11 +286,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 10,
     elevation: 8,
-    marginBottom: 16, // Align slightly higher than speedometer
+    marginBottom: 16,
   },
-  reportButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
-  },
+  reportButtonDisabled: { opacity: 0.6 },
+  reportButtonText: { color: '#fff', fontSize: 18, fontWeight: '700' },
 });

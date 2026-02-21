@@ -1,52 +1,92 @@
-import React from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  ImageBackground, 
-  SafeAreaView, 
-  StatusBar 
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ImageBackground,
+  StatusBar,
+  ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { getHazard } from '../../services/api';
+import { Hazard } from '../../types';
 
 export default function HazardEventDetails() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
+  const [hazard, setHazard] = useState<Hazard | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    setError(null);
+    getHazard(id)
+      .then(setHazard)
+      .catch(() => setError('Failed to load hazard details.'))
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#1973f0" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !hazard) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>{error ?? 'Hazard not found.'}</Text>
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+            <Text style={styles.backBtnText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const confidencePct = `${Math.round(hazard.confidence * 100)}%`;
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" />
-      
+
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.iconButton}>
+        <TouchableOpacity style={styles.iconButton} onPress={() => router.back()}>
           <MaterialIcons name="arrow-back-ios" size={20} color="#0f172a" style={{ marginLeft: 6 }} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>
-          Pothole Detected
+          {hazard.type.charAt(0).toUpperCase() + hazard.type.slice(1)} Detected
         </Text>
         <TouchableOpacity style={styles.editButton}>
           <Text style={styles.editText}>Edit</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Main Content */}
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-        
+
         {/* Video Section */}
         <View style={styles.section}>
           <View style={styles.videoContainer}>
-            <ImageBackground 
-              source={{ uri: 'https://via.placeholder.com/600x400/101822/ffffff?text=Video+Thumbnail' }} 
+            <ImageBackground
+              source={{ uri: hazard.thumbnailUrl }}
               style={styles.videoThumbnail}
             >
               <View style={styles.videoOverlay} />
-              
-              {/* Play Button */}
               <TouchableOpacity style={styles.playButton}>
                 <MaterialIcons name="play-arrow" size={36} color="#ffffff" />
               </TouchableOpacity>
-              
-              {/* Controls */}
               <View style={styles.videoControls}>
                 <View style={styles.timeRow}>
                   <Text style={styles.timeText}>00:00</Text>
@@ -56,10 +96,8 @@ export default function HazardEventDetails() {
                   <View style={styles.progressBarFill} />
                 </View>
               </View>
-              
-              {/* Timestamp */}
               <View style={styles.timestampBadge}>
-                <Text style={styles.timestampText}>Oct 24, 14:30</Text>
+                <Text style={styles.timestampText}>{hazard.createdAt}</Text>
               </View>
             </ImageBackground>
           </View>
@@ -74,23 +112,21 @@ export default function HazardEventDetails() {
               <MaterialIcons name="open-in-new" size={14} color="#1973f0" />
             </TouchableOpacity>
           </View>
-          
           <View style={styles.mapContainer}>
-            <ImageBackground 
-              source={{ uri: 'https://via.placeholder.com/600x250/e2e8f0/64748b?text=Map+View' }} 
+            <ImageBackground
+              source={{ uri: 'https://via.placeholder.com/600x250/e2e8f0/64748b?text=Map+View' }}
               style={styles.mapBackground}
             >
-              {/* Map Pin (Simplified for RN) */}
               <View style={styles.mapPinContainer}>
                 <View style={styles.mapPinOuter}>
                   <View style={styles.mapPinInner} />
                 </View>
               </View>
-
-              {/* Coordinates Badge */}
               <View style={styles.coordBadge}>
                 <MaterialIcons name="location-on" size={16} color="#1973f0" />
-                <Text style={styles.coordText}>34.0522° N, 118.2437° W</Text>
+                <Text style={styles.coordText}>
+                  {hazard.latitude.toFixed(4)}° N, {Math.abs(hazard.longitude).toFixed(4)}° W
+                </Text>
               </View>
             </ImageBackground>
           </View>
@@ -100,50 +136,48 @@ export default function HazardEventDetails() {
         <View style={styles.section}>
           <Text style={styles.sectionTitleDark}>Hazard Metrics</Text>
           <View style={styles.grid}>
-            
-            {/* Card 1 */}
             <View style={styles.card}>
               <View style={styles.cardHeader}>
                 <MaterialIcons name="warning" size={18} color="#64748b" />
                 <Text style={styles.cardHeaderText}>TYPE</Text>
               </View>
-              <Text style={styles.cardValue}>Pothole</Text>
+              <Text style={styles.cardValue}>
+                {hazard.type.charAt(0).toUpperCase() + hazard.type.slice(1)}
+              </Text>
             </View>
 
-            {/* Card 2 */}
             <View style={styles.card}>
               <View style={styles.cardHeader}>
                 <MaterialIcons name="verified-user" size={18} color="#64748b" />
                 <Text style={styles.cardHeaderText}>CONFIDENCE</Text>
               </View>
               <View style={styles.valueRow}>
-                <Text style={styles.cardValue}>94%</Text>
+                <Text style={styles.cardValue}>{confidencePct}</Text>
                 <View style={styles.tagHigh}>
-                  <Text style={styles.tagHighText}>High</Text>
+                  <Text style={styles.tagHighText}>
+                    {hazard.confidence >= 0.8 ? 'High' : hazard.confidence >= 0.5 ? 'Med' : 'Low'}
+                  </Text>
                 </View>
               </View>
             </View>
 
-            {/* Card 3 */}
             <View style={styles.card}>
               <View style={styles.cardHeader}>
                 <MaterialIcons name="speed" size={18} color="#64748b" />
                 <Text style={styles.cardHeaderText}>VEHICLE SPEED</Text>
               </View>
               <Text style={styles.cardValue}>
-                42 <Text style={styles.cardValueUnit}>mph</Text>
+                {hazard.vehicleSpeed} <Text style={styles.cardValueUnit}>mph</Text>
               </Text>
             </View>
 
-            {/* Card 4 */}
             <View style={styles.card}>
               <View style={styles.cardHeader}>
                 <MaterialIcons name="vibration" size={18} color="#64748b" />
                 <Text style={styles.cardHeaderText}>G-FORCE</Text>
               </View>
-              <Text style={styles.cardValue}>1.2g</Text>
+              <Text style={styles.cardValue}>{hazard.gForce}g</Text>
             </View>
-
           </View>
         </View>
 
@@ -162,37 +196,19 @@ export default function HazardEventDetails() {
         <View style={styles.section}>
           <Text style={styles.sectionTitleDark}>Activity Log</Text>
           <View style={styles.timeline}>
-            
-            {/* Timeline Item 1 */}
-            <View style={styles.timelineItem}>
-              <View style={[styles.timelineDot, styles.timelineDotPrimary]} />
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineTime}>Today, 14:35 PM</Text>
-                <Text style={styles.timelineTitle}>Report sent to Dept of Transportation</Text>
-                <Text style={styles.timelineSub}>Ticket ID: #TR-88219</Text>
+            {hazard.activityLog.map((entry, i) => (
+              <View
+                key={i}
+                style={[styles.timelineItem, i === hazard.activityLog.length - 1 && styles.timelineItemLast]}
+              >
+                <View style={[styles.timelineDot, i === 0 ? styles.timelineDotPrimary : styles.timelineDotGray]} />
+                <View style={styles.timelineContent}>
+                  <Text style={styles.timelineTime}>{entry.time}</Text>
+                  <Text style={styles.timelineTitle}>{entry.title}</Text>
+                  {entry.sub ? <Text style={styles.timelineSub}>{entry.sub}</Text> : null}
+                </View>
               </View>
-            </View>
-
-            {/* Timeline Item 2 */}
-            <View style={styles.timelineItem}>
-              <View style={[styles.timelineDot, styles.timelineDotGray]} />
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineTime}>Today, 14:31 PM</Text>
-                <Text style={styles.timelineTitle}>Uploaded to Vigilane Cloud</Text>
-              </View>
-            </View>
-
-            {/* Timeline Item 3 */}
-            <View style={[styles.timelineItem, styles.timelineItemLast]}>
-              <View style={[styles.timelineDot, styles.timelineDotGray]} />
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineTime}>Today, 14:30 PM</Text>
-                <Text style={styles.timelineTitle}>Hazard Detected</Text>
-                <Text style={styles.timelineSub}>Auto-detection triggered by G-sensor</Text>
-              </View>
-            </View>
-
-            {/* Connecting Line */}
+            ))}
             <View style={styles.timelineLine} />
           </View>
         </View>
@@ -203,10 +219,16 @@ export default function HazardEventDetails() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#f6f7f8',
+  safeArea: { flex: 1, backgroundColor: '#f6f7f8' },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  errorText: { color: '#64748b', fontSize: 14, marginBottom: 16, textAlign: 'center' },
+  backBtn: {
+    backgroundColor: '#1973f0',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 8,
   },
+  backBtnText: { color: '#fff', fontWeight: '600' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -231,26 +253,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0f172a',
   },
-  editButton: {
-    width: 40,
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
-  editText: {
-    color: '#1973f0',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  container: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingBottom: 40,
-  },
-  section: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
+  editButton: { width: 40, alignItems: 'flex-end', justifyContent: 'center' },
+  editText: { color: '#1973f0', fontSize: 16, fontWeight: '600' },
+  container: { flex: 1 },
+  contentContainer: { paddingBottom: 40 },
+  section: { paddingHorizontal: 16, paddingTop: 16 },
   videoContainer: {
     width: '100%',
     aspectRatio: 16 / 9,
@@ -263,15 +270,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
   },
-  videoThumbnail: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  videoOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-  },
+  videoThumbnail: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  videoOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)' },
   playButton: {
     width: 64,
     height: 64,
@@ -287,29 +287,17 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     padding: 12,
-    paddingTop: 24, // to create gradient effect mentally
+    paddingTop: 24,
   },
-  timeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  timeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '600',
-  },
+  timeRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  timeText: { color: '#fff', fontSize: 10, fontWeight: '600' },
   progressBarBg: {
     height: 4,
     backgroundColor: 'rgba(255,255,255,0.3)',
     borderRadius: 2,
     overflow: 'hidden',
   },
-  progressBarFill: {
-    width: '33%',
-    height: '100%',
-    backgroundColor: '#1973f0',
-  },
+  progressBarFill: { width: '33%', height: '100%', backgroundColor: '#1973f0' },
   timestampBadge: {
     position: 'absolute',
     top: 12,
@@ -319,39 +307,17 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 4,
   },
-  timestampText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '600',
-  },
+  timestampText: { color: '#fff', fontSize: 10, fontWeight: '600' },
   locationHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
   },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
-    letterSpacing: 0.5,
-  },
-  sectionTitleDark: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0f172a',
-    marginBottom: 12,
-  },
-  openMapsBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  openMapsText: {
-    color: '#1973f0',
-    fontSize: 12,
-    fontWeight: '600',
-  },
+  sectionTitle: { fontSize: 12, fontWeight: '600', color: '#64748b', letterSpacing: 0.5 },
+  sectionTitleDark: { fontSize: 18, fontWeight: '700', color: '#0f172a', marginBottom: 12 },
+  openMapsBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  openMapsText: { color: '#1973f0', fontSize: 12, fontWeight: '600' },
   mapContainer: {
     width: '100%',
     aspectRatio: 21 / 9,
@@ -360,11 +326,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
-  mapBackground: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  mapBackground: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   mapPinContainer: {
     position: 'absolute',
     top: '50%',
@@ -401,16 +363,8 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     gap: 6,
   },
-  coordText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#0f172a',
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
+  coordText: { fontSize: 10, fontWeight: '600', color: '#0f172a' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   card: {
     width: '48%',
     backgroundColor: '#fff',
@@ -420,43 +374,18 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     marginBottom: 12,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    gap: 6,
-  },
-  cardHeaderText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#64748b',
-  },
-  cardValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  cardValueUnit: {
-    fontSize: 14,
-    fontWeight: '400',
-    color: '#64748b',
-  },
-  valueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 6 },
+  cardHeaderText: { fontSize: 10, fontWeight: '600', color: '#64748b' },
+  cardValue: { fontSize: 18, fontWeight: '700', color: '#0f172a' },
+  cardValueUnit: { fontSize: 14, fontWeight: '400', color: '#64748b' },
+  valueRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   tagHigh: {
     backgroundColor: 'rgba(34, 197, 94, 0.2)',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
   },
-  tagHighText: {
-    color: '#16a34a',
-    fontSize: 10,
-    fontWeight: '600',
-  },
+  tagHighText: { color: '#16a34a', fontSize: 10, fontWeight: '600' },
   actionRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
@@ -473,11 +402,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 8,
   },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   secondaryButton: {
     width: 52,
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
@@ -487,10 +412,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(239, 68, 68, 0.2)',
   },
-  timeline: {
-    paddingLeft: 8,
-    marginTop: 8,
-  },
+  timeline: { paddingLeft: 8, marginTop: 8 },
   timelineLine: {
     position: 'absolute',
     left: 15,
@@ -500,13 +422,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#e2e8f0',
     zIndex: -1,
   },
-  timelineItem: {
-    flexDirection: 'row',
-    marginBottom: 24,
-  },
-  timelineItemLast: {
-    marginBottom: 0,
-  },
+  timelineItem: { flexDirection: 'row', marginBottom: 24 },
+  timelineItemLast: { marginBottom: 0 },
   timelineDot: {
     width: 16,
     height: 16,
@@ -515,29 +432,10 @@ const styles = StyleSheet.create({
     borderColor: '#f6f7f8',
     marginTop: 2,
   },
-  timelineDotPrimary: {
-    backgroundColor: '#1973f0',
-  },
-  timelineDotGray: {
-    backgroundColor: '#cbd5e1',
-  },
-  timelineContent: {
-    flex: 1,
-    marginLeft: 16,
-  },
-  timelineTime: {
-    fontSize: 10,
-    color: '#64748b',
-    marginBottom: 2,
-  },
-  timelineTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#0f172a',
-  },
-  timelineSub: {
-    fontSize: 12,
-    color: '#64748b',
-    marginTop: 4,
-  },
+  timelineDotPrimary: { backgroundColor: '#1973f0' },
+  timelineDotGray: { backgroundColor: '#cbd5e1' },
+  timelineContent: { flex: 1, marginLeft: 16 },
+  timelineTime: { fontSize: 10, color: '#64748b', marginBottom: 2 },
+  timelineTitle: { fontSize: 14, fontWeight: '600', color: '#0f172a' },
+  timelineSub: { fontSize: 12, color: '#64748b', marginTop: 4 },
 });
