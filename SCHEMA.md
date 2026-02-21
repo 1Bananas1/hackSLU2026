@@ -74,21 +74,28 @@ Represents a single road-hazard detection event emitted by the ML pipeline.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `session_id` | `string` | ✅ | Firestore document ID of the parent `sessions` document |
+| `event_type` | `string` | ✅ | Hazard category (e.g. `"pothole"`, `"crack"`) |
 | `confidence` | `float` | ✅ | Fraction of sliding-window frames that fired (range `0.0 – 1.0`) |
-| `labels` | `array<string>` | ✅ | Label(s) from the Florence-2 model (e.g. `["pothole"]`, `["crack"]`) |
-| `bboxes` | `array<object>` | ✅ | Bounding boxes; each element is `{x1, y1, x2, y2}` in pixel coordinates |
 | `timestamp` | `timestamp` | ✅ | UTC datetime of detection |
-| `frame_number` | `integer` | ✅ | Absolute frame index in the video/webcam stream; defaults to `0` |
+| `status` | `string` | ✅ | Lifecycle state: `"pending"` → `"reported"` or `"dismissed"`; defaults to `"pending"` |
+| `photo_url` | `string` | ❌ | Firebase Storage URL of the frame snapshot; `null` if no photo was captured |
+| `location` | `map` | ❌ | GPS coordinates at time of detection: `{"lat": float, "lng": float}`; `null` if unavailable |
 
 > `id` is the auto-generated Firestore document ID — never stored as a field inside the document.
 
-#### `bboxes` element schema
+#### `location` map schema
 
 ```json
-{ "x1": 120, "y1": 200, "x2": 300, "y2": 380 }
+{ "lat": 38.6270, "lng": -90.1994 }
 ```
 
-Each bounding box is stored as a Firestore map (not an array of 4 numbers) to keep field names explicit.
+#### `status` values
+
+| Value | Meaning |
+|-------|---------|
+| `"pending"` | Detected by ML, not yet reviewed |
+| `"reported"` | Confirmed and submitted to city/authority |
+| `"dismissed"` | Marked as a false positive or duplicate |
 
 ### Indexes / Frequent Queries
 
@@ -103,13 +110,12 @@ Each bounding box is stored as a Firestore map (not an array of 4 numbers) to ke
 ```json
 {
   "session_id": "abc123XYZfirestore",
+  "event_type": "pothole",
   "confidence": 0.85,
-  "labels": ["pothole"],
-  "bboxes": [
-    { "x1": 120, "y1": 200, "x2": 300, "y2": 380 }
-  ],
   "timestamp": "2026-02-21T14:03:15Z",
-  "frame_number": 50
+  "status": "pending",
+  "photo_url": "https://storage.googleapis.com/your-bucket/frames/abc123.jpg",
+  "location": { "lat": 38.6270, "lng": -90.1994 }
 }
 ```
 
