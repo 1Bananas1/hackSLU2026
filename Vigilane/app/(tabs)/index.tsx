@@ -6,11 +6,9 @@ import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { createHazard, createSession, endSession, getSessionHazards, type Hazard } from '@/services/api';
 
 export default function HomeScreen() {
-  const theme = useColorScheme() ?? 'light';
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [hazards, setHazards] = useState<Hazard[]>([]);
@@ -96,40 +94,28 @@ export default function HomeScreen() {
 
       <ThemedView style={styles.stepContainer}>
         <TouchableOpacity
-          style={[
-            styles.button,
-            { backgroundColor: theme === 'light' ? Colors.light.tint : Colors.dark.tint },
-          ]}
+          style={styles.button}
           disabled={loading}
           onPress={handleStartSession}>
           <ThemedText style={styles.buttonText}>Start Session</ThemedText>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[
-            styles.button,
-            { backgroundColor: theme === 'light' ? Colors.light.tint : Colors.dark.tint },
-          ]}
+          style={styles.button}
           disabled={loading}
           onPress={handleCreateHazard}>
           <ThemedText style={styles.buttonText}>Create Hazard</ThemedText>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[
-            styles.button,
-            { backgroundColor: theme === 'light' ? Colors.light.tint : Colors.dark.tint },
-          ]}
+          style={styles.button}
           disabled={loading}
           onPress={handleLoadHazards}>
           <ThemedText style={styles.buttonText}>Load Hazards</ThemedText>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[
-            styles.button,
-            { backgroundColor: theme === 'light' ? Colors.light.tint : Colors.dark.tint },
-          ]}
+          style={styles.button}
           disabled={loading}
           onPress={handleEndSession}>
           <ThemedText style={styles.buttonText}>End Session</ThemedText>
@@ -164,9 +150,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 14,
+    backgroundColor: Colors.light.tint,
   },
   buttonText: {
-    color: Colors.light.background,
+    color: '#ffffff',
     fontWeight: '600',
   },
   reactLogo: {

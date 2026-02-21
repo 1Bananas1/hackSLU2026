@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { getHazards } from '../../services/api';
 import { Hazard } from '../../types';
 
@@ -115,9 +116,12 @@ export default function ReportHistory() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchHazards();
-  }, [fetchHazards]);
+  // Refetch every time screen gains focus (e.g. after deleting a hazard)
+  useFocusEffect(
+    useCallback(() => {
+      fetchHazards();
+    }, [fetchHazards])
+  );
 
   const filteredHazards = useMemo(
     () => hazards.filter((h) => matchesFilter(h, activeFilter)),
@@ -179,13 +183,7 @@ export default function ReportHistory() {
       <StatusBar barStyle="light-content" backgroundColor={colors.background} />
 
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerIcon}>
-          <MaterialIcons name="arrow-back" size={28} color={colors.textSecondary} />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Report History</Text>
-        <TouchableOpacity style={styles.headerIcon}>
-          <MaterialIcons name="settings" size={28} color={colors.textSecondary} />
-        </TouchableOpacity>
       </View>
 
       <View style={styles.searchContainer}>

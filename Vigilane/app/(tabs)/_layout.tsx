@@ -51,12 +51,7 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="hazardDetails"
-        options={{
-          href: null,
-        }}
-      />
+
       <Tabs.Screen
         name="settings"
         options={{
