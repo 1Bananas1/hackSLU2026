@@ -1,7 +1,7 @@
 """
 CRUD operations for the 'hazards' Firestore collection.
 
-Henry's Flask routes should call these functions directly — never touch `db` from outside
+Flask routes should call these functions directly — never touch `db` from outside
 this service layer.
 
 Typical usage from the Flask backend:
@@ -10,11 +10,11 @@ Typical usage from the Flask backend:
     from src.database.models import Hazard
 
     hazard = Hazard(
-        confidence=0.82,
-        bboxes=[[120, 200, 300, 380]],
-        labels=["pothole"],
         session_id=session_id,
-        frame_number=frame_number,
+        event_type="pothole",
+        confidence=0.85,
+        photo_url="https://storage.googleapis.com/...",
+        location={"lat": 38.627, "lng": -90.199},
     )
     hazard_id = save_hazard(hazard)
 """
@@ -76,3 +76,11 @@ def get_all_hazards() -> List[Hazard]:
 def delete_hazard(hazard_id: str) -> None:
     """Permanently delete a hazard document."""
     db.collection(COLLECTION).document(hazard_id).delete()
+
+
+def update_hazard_status(hazard_id: str, status: str) -> None:
+    """
+    Update the status field of a hazard document.
+    Valid values: "pending" | "reported" | "dismissed"
+    """
+    db.collection(COLLECTION).document(hazard_id).update({"status": status})

@@ -46,6 +46,7 @@ The token is verified server-side via `firebase_admin.auth.verify_id_token()`. O
 | `GET` | `/hazards` | ✅ | List all hazards (newest first) |
 | `GET` | `/hazards/<id>` | ✅ | Fetch one hazard |
 | `DELETE` | `/hazards/<id>` | ✅ | Delete a hazard |
+| `POST` | `/hazards/<id>/report` | ✅ | Submit a formal city report (PII encrypted at rest) |
 
 ---
 
@@ -174,32 +175,34 @@ Record a new hazard event. Automatically increments the parent session's `hazard
 **Request body (JSON):**
 ```json
 {
-  "session_id":   "abc123XYZfirestore",
-  "confidence":   0.85,
-  "labels":       ["pothole"],
-  "bboxes":       [{ "x1": 120, "y1": 200, "x2": 300, "y2": 380 }],
-  "frame_number": 50
+  "session_id":  "abc123XYZfirestore",
+  "event_type":  "pothole",
+  "confidence":  0.85,
+  "photo_url":   "https://storage.googleapis.com/bucket/frames/abc123/frame_0050.jpg",
+  "location":    { "lat": 38.6270, "lng": -90.1994 }
 }
 ```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `session_id` | `string` | ✅ | Firestore ID of the parent session |
+| `event_type` | `string` | ✅ | Hazard category (e.g. `"pothole"`, `"crack"`) |
 | `confidence` | `float` | ✅ | Fraction of sliding-window frames that fired (`0.0 – 1.0`) |
-| `labels` | `array<string>` | ✅ | Label(s) from the ML model (e.g. `["pothole"]`) |
-| `bboxes` | `array<object>` | ✅ | Bounding boxes; each `{x1, y1, x2, y2}` in pixels |
-| `frame_number` | `integer` | ❌ | Absolute frame index in the stream; defaults to `0` |
+| `photo_url` | `string` | ❌ | Firebase Storage URL of the frame snapshot |
+| `location` | `object` | ❌ | GPS coords: `{"lat": float, "lng": float}` |
+| `status` | `string` | ❌ | Initial status; defaults to `"pending"` |
 
 **Response `201`:**
 ```json
 {
   "id": "xyz789firestore",
   "session_id": "abc123XYZfirestore",
+  "event_type": "pothole",
   "confidence": 0.85,
-  "labels": ["pothole"],
-  "bboxes": [{ "x1": 120, "y1": 200, "x2": 300, "y2": 380 }],
-  "frame_number": 50,
-  "timestamp": "2026-02-21T14:03:15"
+  "timestamp": "2026-02-21T14:03:15+00:00",
+  "photo_url": "https://storage.googleapis.com/bucket/frames/abc123/frame_0050.jpg",
+  "location": { "lat": 38.6270, "lng": -90.1994 },
+  "status": "pending"
 }
 ```
 
@@ -216,7 +219,7 @@ Record a new hazard event. Automatically increments the parent session's `hazard
 
 Return all hazards, newest first.
 
-**Response `200`:** Array of hazard objects.
+**Response `200`:** Array of hazard objects (same shape as above).
 
 ---
 
@@ -251,6 +254,49 @@ Permanently delete a hazard document. Does **not** decrement the parent session'
 
 ---
 
+### `POST /hazards/<hazard_id>/report`
+
+Submit a formal city report for a detected hazard.
+
+- **Encrypts** `reporter_name`, `reporter_email`, and `reporter_phone` with Fernet (AES-128-CBC) before writing to Firestore — plaintext never touches the database.
+- Transitions the hazard's `status` from `"pending"` → `"reported"`.
+- Creates a document in the `reports` Firestore collection.
+
+**Request body (JSON):**
+```json
+{
+  "reporter_name":  "Jane Doe",
+  "reporter_email": "jane@example.com",
+  "reporter_phone": "+1-314-555-0199"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `reporter_name` | `string` | ✅ | Full name — encrypted before storage |
+| `reporter_email` | `string` | ✅ | Email address — encrypted before storage |
+| `reporter_phone` | `string` | ❌ | Phone number — encrypted before storage |
+
+**Response `201`:**
+```json
+{
+  "message": "Report submitted",
+  "report_id": "rpt456firestore",
+  "hazard_id": "xyz789firestore"
+}
+```
+
+**Errors:**
+
+| Status | Body | Cause |
+|--------|------|-------|
+| `400` | `{"error": "Missing required fields: [...]"}` | `reporter_name` or `reporter_email` absent |
+| `404` | `{"error": "Hazard not found"}` | No hazard with that ID |
+| `409` | `{"error": "Hazard has already been reported"}` | Status is already `"reported"` |
+| `409` | `{"error": "Cannot report a dismissed hazard"}` | Status is `"dismissed"` |
+
+---
+
 ## Running the Server
 
 ```bash
@@ -261,7 +307,13 @@ python -m src.main
 flask --app src.main:app run --debug
 ```
 
-Ensure `serviceAccountKey.json` exists in the repo root, or set `FIREBASE_KEY_PATH` in a `.env` file.
+Required `.env` variables:
+
+```
+FIREBASE_KEY_PATH=serviceAccountKey.json
+FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+ENCRYPTION_KEY=<output of Fernet.generate_key()>
+```
 
 ---
 
@@ -271,10 +323,11 @@ Ensure `serviceAccountKey.json` exists in the repo root, or set `FIREBASE_KEY_PA
 src/api/
 ├── __init__.py          create_app() factory + GET / health check
 ├── auth.py              require_auth decorator (Firebase token verification)
-├── requirements.txt     flask, firebase-admin, python-dotenv
+├── requirements.txt     flask, firebase-admin, python-dotenv, cryptography
 ├── API.md               ← this file
 └── routes/
     ├── __init__.py      register_routes() — wires blueprints onto the app
     ├── sessions.py      POST/GET /sessions, POST /sessions/<id>/end
-    └── hazards.py       POST/GET/DELETE /hazards, GET /sessions/<id>/hazards
+    └── hazards.py       POST/GET/DELETE /hazards, POST /hazards/<id>/report,
+                         GET /sessions/<id>/hazards
 ```
