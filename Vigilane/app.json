@@ -21,7 +21,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.vigilane.app"
+      "package": "com.anonymous.Vigilane"
     },
     "web": {
       "output": "static",

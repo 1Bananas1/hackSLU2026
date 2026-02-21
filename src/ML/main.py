@@ -1,9 +1,9 @@
 """
-Live Pothole Detection using Microsoft Florence-2
+Live Pothole Detection using YOLOv8 (keremberke/yolov8n-pothole-segmentation)
 HackSLU 2026 - Dashcam Infrastructure Auto Reporter
 
-Detects potholes from a webcam or video file using Florence-2's
-CAPTION_TO_PHRASE_GROUNDING task and a temporal sliding window for confidence.
+Detects potholes from a webcam or video file using a YOLOv8 model
+pre-trained on pothole data. Prints to console when detected above threshold.
 
 When a detection is triggered the driver is prompted via audio:
   "Was that a pothole?"
@@ -24,118 +24,96 @@ Usage:
 
 import argparse
 import datetime
+import os
 import sys
 from collections import deque
 
 import cv2
-import torch
-from PIL import Image
-from transformers import AutoModelForCausalLM, AutoProcessor
+from ultralytics import YOLO
 
 # ---------------------------------------------------------------------------
-# Tuneable constants — override via CLI flags
+# Constants — override via CLI flags
 # ---------------------------------------------------------------------------
-MODEL_ID = "microsoft/Florence-2-base"
-TASK_PROMPT = "<CAPTION_TO_PHRASE_GROUNDING>"
-# Richer scene description helps Florence-2 ground the phrase correctly
-TEXT_PROMPT = "A road surface with a pothole crack or depression."
+MODEL_PATH = "src/ML/best.pt"
 
-FRAME_SKIP = 5        # run inference every Nth captured frame
-WINDOW_SIZE = 10      # sliding window depth (processed frames)
-THRESHOLD = 0.40      # fraction of window frames that must detect pothole to alert
-ALERT_COOLDOWN = 30   # minimum processed frames between consecutive printed alerts
-
-# Keywords to match against Florence-2 output labels
-POTHOLE_KEYWORDS = {"pothole", "hole", "crack", "depression", "damage", "road damage"}
+CONFIDENCE_THRESHOLD = 0.12   # min per-detection YOLO confidence to count
+HAZARD_CLASSES = {            # all pavement distress types worth alerting on
+    "pothole",
+    "alligator cracking",
+    "longitudinal cracking",
+    "transverse cracking",
+    "rutting",
+    "patching",
+}
+ROI_TOP_FRACTION = 0.55       # ignore detections in the top N% of frame (sky/horizon can't be potholes)
+ROI_BOTTOM_FRACTION = 0.88    # ignore detections below this point (car hood reflections)
+FRAME_SKIP = 1                 # run inference every frame (damage passes fast at highway speeds)
+WINDOW_SIZE = 3                # rolling window for smoothing (processed frames)
+SMOOTHED_THRESHOLD = 0.34      # fraction of window frames with a detection to alert (1/3 frames)
+ALERT_COOLDOWN = 30            # min frames between printed alerts
+OUTPUT_DIR = "dataset/output"  # where to save detection snapshots
 
 
 # ---------------------------------------------------------------------------
 # Model loading
 # ---------------------------------------------------------------------------
 def load_model():
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-
-    print(f"[INFO] Loading Florence-2 on {device} ({dtype})...")
-    print("[INFO] First run will download ~460MB of model weights.")
-
-    model = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID,
-        torch_dtype=dtype,
-        trust_remote_code=True,  # Required: Florence-2 ships custom modeling code
-    ).to(device)
-    model.eval()
-
-    processor = AutoProcessor.from_pretrained(
-        MODEL_ID,
-        trust_remote_code=True,
-    )
-
+    print(f"[INFO] Loading fine-tuned YOLOv8 model from {MODEL_PATH}...")
+    model = YOLO(MODEL_PATH)
     print("[INFO] Model ready.")
-    return model, processor, device, dtype
+    return model
 
 
 # ---------------------------------------------------------------------------
 # Single-frame inference
 # ---------------------------------------------------------------------------
-def run_inference(model, processor, device, dtype, pil_image):
+def run_inference(model, frame, conf_threshold):
     """
-    Run Florence-2 grounding on a PIL image.
-    Returns (labels: list[str], bboxes: list[[x1, y1, x2, y2]]).
+    Run YOLO on a BGR frame.
+    Returns (max_conf: float, detections: list[dict])
+    where each detection is {"conf": float, "bbox": [x1,y1,x2,y2], "label": str}.
+    Only returns detections matching POTHOLE_CLASS.
     """
-    full_prompt = TASK_PROMPT + TEXT_PROMPT
+    results = model(frame, conf=conf_threshold, verbose=False)
+    boxes = results[0].boxes
 
-    inputs = processor(
-        text=full_prompt,
-        images=pil_image,
-        return_tensors="pt",
-    ).to(device, dtype)
+    if boxes is None or len(boxes) == 0:
+        return 0.0, []
 
-    with torch.no_grad():
-        generated_ids = model.generate(
-            input_ids=inputs["input_ids"],
-            pixel_values=inputs["pixel_values"],
-            max_new_tokens=1024,
-            num_beams=3,
-            do_sample=False,
-        )
+    confs = boxes.conf.cpu().numpy()
+    xyxy = boxes.xyxy.cpu().numpy()
+    cls_ids = boxes.cls.cpu().numpy().astype(int)
+    names = results[0].names
 
-    # skip_special_tokens=False is required: post_process_generation needs
-    # Florence-2's special <loc_N> tokens to reconstruct bounding boxes
-    generated_text = processor.batch_decode(
-        generated_ids, skip_special_tokens=False
-    )[0]
+    import os as _os
+    if _os.environ.get("YOLO_RAW_DEBUG"):
+        for c, b, cls_id in zip(confs, xyxy, cls_ids):
+            print(f"  RAW: {names[cls_id]} conf={float(c):.2f} y1={b[1]:.0f}")
 
-    parsed = processor.post_process_generation(
-        generated_text,
-        task=TASK_PROMPT,
-        image_size=(pil_image.width, pil_image.height),
-    )
+    h = frame.shape[0]
+    roi_min_y = h * ROI_TOP_FRACTION
+    roi_max_y = h * ROI_BOTTOM_FRACTION
 
-    result = parsed.get(TASK_PROMPT, {})
-    labels = result.get("labels", [])
-    bboxes = result.get("bboxes", [])
-    return labels, bboxes
+    detections = [
+        {"conf": float(c), "bbox": b.tolist(), "label": names[cls_id]}
+        for c, b, cls_id in zip(confs, xyxy, cls_ids)
+        if names[cls_id] in HAZARD_CLASSES and roi_min_y <= b[1] < roi_max_y
+    ]
+
+    if not detections:
+        return 0.0, []
+    return max(d["conf"] for d in detections), detections
 
 
 # ---------------------------------------------------------------------------
-# Detection logic
+# Alert
 # ---------------------------------------------------------------------------
-def contains_pothole(labels):
-    """Return True if any label matches a pothole-related keyword."""
-    for lbl in labels:
-        if any(kw in lbl.lower() for kw in POTHOLE_KEYWORDS):
-            return True
-    return False
-
-
-def trigger_alert(confidence, bboxes, frame_number):
+def trigger_alert(max_conf, detections, frame_number):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    n_boxes = len(bboxes)
     print(
         f"[{timestamp}] POTHOLE DETECTED | "
-        f"Confidence: {confidence:.2f} | "
-        f"Boxes: {n_boxes} | "
+        f"Confidence: {max_conf:.2f} | "
+        f"Boxes: {len(detections)} | "
         f"Frame: {frame_number}"
     )
 
@@ -143,18 +121,16 @@ def trigger_alert(confidence, bboxes, frame_number):
 # ---------------------------------------------------------------------------
 # Optional display annotation
 # ---------------------------------------------------------------------------
-def annotate_frame(frame, bboxes, labels, confidence):
-    """Draw bounding boxes and confidence overlay on frame (in-place)."""
-    for i, bbox in enumerate(bboxes):
-        x1, y1, x2, y2 = (int(v) for v in bbox)
+def annotate_frame(frame, detections, max_conf):
+    for det in detections:
+        x1, y1, x2, y2 = (int(v) for v in det["bbox"])
         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-        label_text = labels[i] if i < len(labels) else "pothole"
         cv2.putText(
-            frame, label_text, (x1, max(y1 - 8, 0)),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2,
+            frame, f"{det['conf']:.2f}", (x1, max(y1 - 8, 0)),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2,
         )
     cv2.putText(
-        frame, f"Confidence: {confidence:.2f}", (10, 30),
+        frame, f"Max conf: {max_conf:.2f}", (10, 30),
         cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2,
     )
     return frame
@@ -165,7 +141,7 @@ def annotate_frame(frame, bboxes, labels, confidence):
 # ---------------------------------------------------------------------------
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Live pothole detection using Microsoft Florence-2"
+        description="Live pothole detection using YOLOv8"
     )
     source_group = parser.add_mutually_exclusive_group(required=True)
     source_group.add_argument(
@@ -181,17 +157,20 @@ def parse_args():
         help="Disable the cv2 video window (headless/console-only mode)",
     )
     parser.add_argument(
-        "--threshold", type=float, default=THRESHOLD,
-        help=f"Detection confidence threshold 0-1 (default: {THRESHOLD})",
+        "--threshold", type=float, default=CONFIDENCE_THRESHOLD,
+        help=f"Per-detection YOLO confidence threshold 0-1 (default: {CONFIDENCE_THRESHOLD})",
     )
     parser.add_argument(
         "--skip", type=int, default=FRAME_SKIP,
-        help=f"Run inference every Nth frame (default: {FRAME_SKIP}). "
-             "Increase to 15-30 on CPU for usable speed.",
+        help=f"Run inference every Nth frame (default: {FRAME_SKIP})",
     )
     parser.add_argument(
         "--window", type=int, default=WINDOW_SIZE,
-        help=f"Sliding window size in processed frames (default: {WINDOW_SIZE})",
+        help=f"Smoothing window size in processed frames (default: {WINDOW_SIZE})",
+    )
+    parser.add_argument(
+        "--debug", action="store_true",
+        help="Print raw YOLO detections for every processed frame",
     )
 
     # --- Voice confirmation options ---
@@ -294,20 +273,22 @@ def main():
         sys.exit(1)
 
     show_window = not args.no_display
-    threshold = args.threshold
+    conf_threshold = args.threshold
     frame_skip = args.skip
     window_size = args.window
+    debug = args.debug
 
+    # Rolling window: 1 = pothole detected this frame, 0 = not detected
     detection_window = deque(maxlen=window_size)
-    frame_count = 0        # total captured frames
-    processed_count = 0    # frames actually sent to Florence-2
-    last_alert_processed = -ALERT_COOLDOWN
+    frame_count = 0
+    processed_count = 0
+    last_alert_frame = -ALERT_COOLDOWN
 
-    print(f"[INFO] Starting detection loop (skip={frame_skip}, window={window_size}, threshold={threshold}).")
+    print(f"[INFO] Starting (skip={frame_skip}, window={window_size}, threshold={conf_threshold}).")
     if show_window:
-        print("[INFO] Press 'q' in the video window to quit.")
+        print("[INFO] Press 'q' to quit.")
     else:
-        print("[INFO] Running headless. Press Ctrl+C to quit.")
+        print("[INFO] Headless mode. Press Ctrl+C to quit.")
 
     try:
         while cap.isOpened():
@@ -318,7 +299,7 @@ def main():
 
             frame_count += 1
 
-            # --- Frame skip gate: display non-inference frames as-is ---
+            # Skip frames — still show them in display
             if frame_count % frame_skip != 0:
                 if show_window:
                     cv2.imshow("Pothole Detector", frame)
@@ -328,15 +309,10 @@ def main():
 
             processed_count += 1
 
-            # --- BGR (OpenCV) -> RGB -> PIL for Florence-2 processor ---
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            pil_image = Image.fromarray(rgb_frame)
+            # YOLO inference (native BGR frame — no conversion needed)
+            max_conf, detections = run_inference(model, frame, conf_threshold)
 
-            # --- Florence-2 inference ---
-            labels, bboxes = run_inference(model, processor, device, dtype, pil_image)
-
-            # --- Update sliding window ---
-            detected = 1 if contains_pothole(labels) else 0
+            detected = 1 if detections else 0
             detection_window.append(detected)
 
             # --- Compute confidence once window is full ---
@@ -386,11 +362,11 @@ def main():
 
             # --- Annotate and show frame ---
             if show_window:
-                if detected and bboxes:
-                    frame = annotate_frame(frame, bboxes, labels, current_confidence)
-                elif current_confidence > 0:
+                if detections:
+                    frame = annotate_frame(frame, detections, max_conf)
+                elif smoothed > 0:
                     cv2.putText(
-                        frame, f"Confidence: {current_confidence:.2f}", (10, 30),
+                        frame, f"Smoothed: {smoothed:.2f}", (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 200, 0), 2,
                     )
                 cv2.imshow("Pothole Detector", frame)

@@ -1,14 +1,92 @@
-src/ML/.venv/*
+# =============================================================================
+# Python / Backend
+# =============================================================================
 
-# Firebase service account key — never commit this
+# Virtual environments
+.venv/
+venv/
+
+# Firebase service account key — never commit
 serviceAccountKey.json
 
 # Environment variables
 .env
+.env*.local
 
-# pycache
-__pycache__/*
-**/__pycache__/*
+# Python bytecode
+__pycache__/
 *.pyc
 *.pyo
 *.pyd
+
+# =============================================================================
+# Node / JavaScript / TypeScript
+# =============================================================================
+
+node_modules/
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.tsbuildinfo
+
+# =============================================================================
+# Expo / React Native
+# =============================================================================
+
+# expo-cli auto-generates this file; patterns are covered by this root gitignore
+Vigilane/.gitignore
+
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+.metro-health-check*
+.kotlin/
+
+# Generated native folders (created by `npx expo prebuild`)
+Vigilane/ios/
+Vigilane/android/
+
+# =============================================================================
+# Android build artifacts
+# =============================================================================
+
+*.jsbundle
+*.iml
+*.hprof
+Vigilane/android/.gradle/
+Vigilane/android/local.properties
+Vigilane/android/build/
+Vigilane/android/.cxx/
+
+# =============================================================================
+# Code signing & certificates
+# =============================================================================
+
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.pem
+*.orig.*
+
+# =============================================================================
+# IDE / Editor
+# =============================================================================
+
+.idea/shelf/
+.idea/workspace.xml
+
+# =============================================================================
+# OS
+# =============================================================================
+
+.DS_Store
+Thumbs.db
+
+# =============================================================================
+# ML
+# =============================================================================
+
+dataset/*
