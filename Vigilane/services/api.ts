@@ -1,4 +1,7 @@
 import { Hazard, Session, CreateHazardPayload, CreateSessionPayload } from '../types';
+
+// Re-export types so callers can import them from this module
+export type { Hazard, Session, CreateHazardPayload, CreateSessionPayload };
 import { Platform } from 'react-native';
 
 const defaultBaseUrl =
@@ -44,20 +47,20 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 // Health check
 // ---------------------------------------------------------------------------
 
-/** GET /api/health — no auth required */
-export async function healthCheck(): Promise<{ status: string; error?: string }> {
-  const res = await fetch(`${BASE_URL}/api/health`);
+/** GET / — no auth required */
+export async function healthCheck(): Promise<{ status: string; service: string }> {
+  const res = await fetch(`${BASE_URL}/`);
   return res.json();
 }
 
 // ---------------------------------------------------------------------------
-// Sessions  —  POST/GET /api/sessions, PATCH /api/sessions/<id>/end
+// Sessions  —  POST/GET /sessions, POST /sessions/<id>/end
 // ---------------------------------------------------------------------------
 
 /** POST /sessions — start a new dashcam recording session */
 export function createSession(device_id: string): Promise<Session> {
   const payload: CreateSessionPayload = { device_id };
-  return request<Session>('/api/sessions', {
+  return request<Session>('/sessions', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -65,51 +68,51 @@ export function createSession(device_id: string): Promise<Session> {
 
 /** GET /sessions — all sessions, newest first */
 export function getSessions(): Promise<Session[]> {
-  return request<Session[]>('/api/sessions');
+  return request<Session[]>('/sessions');
 }
 
 /** GET /sessions/<id> — fetch one session */
 export function getSession(id: string): Promise<Session> {
-  return request<Session>(`/api/sessions/${id}`);
+  return request<Session>(`/sessions/${id}`);
 }
 
-/** PATCH /api/sessions/<id>/end — mark session as completed */
-export function endSession(id: string): Promise<Session> {
-  return request<Session>(`/api/sessions/${id}/end`, {
-    method: 'PATCH',
+/** POST /sessions/<id>/end — mark session as completed */
+export function endSession(id: string): Promise<{ message: string; session_id: string }> {
+  return request<{ message: string; session_id: string }>(`/sessions/${id}/end`, {
+    method: 'POST',
   });
 }
 
 /** GET /sessions/<id>/hazards — hazards for a session, ascending by timestamp */
 export function getSessionHazards(sessionId: string): Promise<Hazard[]> {
-  return request<Hazard[]>(`/api/sessions/${sessionId}/hazards`);
+  return request<Hazard[]>(`/sessions/${sessionId}/hazards`);
 }
 
 // ---------------------------------------------------------------------------
-// Hazards  —  POST/GET/DELETE /api/hazards
+// Hazards  —  POST/GET/DELETE /hazards
 // ---------------------------------------------------------------------------
 
 /** GET /hazards — all hazards, newest first */
 export function getHazards(): Promise<Hazard[]> {
-  return request<Hazard[]>('/api/hazards');
+  return request<Hazard[]>('/hazards');
 }
 
 /** GET /hazards/<id> — fetch one hazard */
 export function getHazard(id: string): Promise<Hazard> {
-  return request<Hazard>(`/api/hazards/${id}`);
+  return request<Hazard>(`/hazards/${id}`);
 }
 
 /** POST /hazards — record a new hazard event (also used for manual reports) */
 export function createHazard(payload: CreateHazardPayload): Promise<Hazard> {
-  return request<Hazard>('/api/hazards', {
+  return request<Hazard>('/hazards', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
-/** DELETE /api/hazards/<id> — permanently delete a hazard */
-export function deleteHazard(id: string): Promise<{ deleted: boolean; hazard_id: string }> {
-  return request<{ deleted: boolean; hazard_id: string }>(`/api/hazards/${id}`, {
+/** DELETE /hazards/<id> — permanently delete a hazard */
+export function deleteHazard(id: string): Promise<{ message: string; hazard_id: string }> {
+  return request<{ message: string; hazard_id: string }>(`/hazards/${id}`, {
     method: 'DELETE',
   });
 }

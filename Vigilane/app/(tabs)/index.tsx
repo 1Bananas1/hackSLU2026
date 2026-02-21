@@ -42,10 +42,10 @@ export default function HomeScreen() {
         return;
       }
       const hazard = await createHazard({
-        confidence: 0.87,
-        bboxes: [[120, 200, 300, 380]],
-        labels: ['pothole'],
         session_id: sessionId,
+        confidence: 0.87,
+        labels: ['pothole'],
+        bboxes: [{ x1: 120, y1: 200, x2: 300, y2: 380 }],
         frame_number: hazards.length + 1,
       });
       setHazards((current) => [hazard, ...current]);

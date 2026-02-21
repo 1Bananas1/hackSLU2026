@@ -25,6 +25,15 @@ export default function TabLayout() {
         },
       }}>
       <Tabs.Screen
+        name="index"
+        options={{
+          title: 'Debug',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="developer-mode" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="liveDashboard"
         options={{
           title: 'Live View',
