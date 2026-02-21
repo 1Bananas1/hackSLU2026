@@ -10,11 +10,14 @@ Usage:
 """
 
 import os
+from pathlib import Path
 
 import firebase_admin
 from dotenv import load_dotenv
 from firebase_admin import credentials
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env")
 load_dotenv()
 
 
@@ -23,14 +26,15 @@ def initialize_firebase() -> None:
     if firebase_admin._apps:
         return
 
-    key_path = os.getenv("FIREBASE_KEY_PATH", "serviceAccountKey.json")
+    key_path = os.getenv("FIREBASE_KEY_PATH")
+    resolved_key_path = Path(key_path) if key_path else PROJECT_ROOT / "serviceAccountKey.json"
 
-    if not os.path.exists(key_path):
+    if not resolved_key_path.exists():
         raise FileNotFoundError(
-            f"Firebase service account key not found at '{key_path}'. "
+            f"Firebase service account key not found at '{resolved_key_path}'. "
             "Set the FIREBASE_KEY_PATH environment variable or place "
-            "serviceAccountKey.json in the repo root."
+            f"serviceAccountKey.json in '{PROJECT_ROOT}'."
         )
 
-    cred = credentials.Certificate(key_path)
+    cred = credentials.Certificate(str(resolved_key_path))
     firebase_admin.initialize_app(cred)
