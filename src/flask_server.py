@@ -61,7 +61,9 @@ def _service_ready():
 def add_cors_headers(response):
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Methods"] = (
+        "GET, POST, PATCH, DELETE, OPTIONS"
+    )
     return response
 
 
@@ -132,9 +134,7 @@ def api_get_hazards():
     if not _service_ready():
         return jsonify({"error": SERVICE_IMPORT_ERROR}), 500
     session_id = request.args.get("session_id")
-    hazards = (
-        get_hazards_by_session(session_id) if session_id else get_all_hazards()
-    )
+    hazards = get_hazards_by_session(session_id) if session_id else get_all_hazards()
     return jsonify([_hazard_to_json(h) for h in hazards])
 
 
