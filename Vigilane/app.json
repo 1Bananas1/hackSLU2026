@@ -2,6 +2,7 @@
   "expo": {
     "name": "Vigilane",
     "slug": "Vigilane",
+    "owner": "imjusthenry",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -11,6 +12,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.vigilane.app",
+      "deploymentTarget": "13.4",
       "infoPlist": {
         "NSCameraUsageDescription": "Vigilane uses the camera to detect road damage in real time.",
         "ITSAppUsesNonExemptEncryption": false
@@ -37,7 +39,10 @@
               "scheme": "com.googleusercontent.apps.920730485139-ldj8kfc3p6q9gjd7l3b5jvlg327jkcgg"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -81,7 +86,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "50be2177-15b4-4073-9938-46f601a94aca"
+        "projectId": "9522ea93-8317-4e23-a2b5-dbf4d3b12cc6"
       }
     }
   }
