@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, signOut as firebaseSignOut, User } from 'firebase/auth';
 import { auth } from '../services/firebase';
+import { upsertUser } from '../services/user';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,6 +38,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
       setLoading(false);
+
+      // Upsert the user profile into Firestore on every sign-in.
+      // Creates users/{uid} on first login; keeps email/display_name/last_seen
+      // current on subsequent logins.
+      if (firebaseUser) {
+        void upsertUser(firebaseUser);
+      }
     });
     return unsubscribe;
   }, []);

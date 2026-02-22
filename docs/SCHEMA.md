@@ -11,12 +11,57 @@
 
 | Collection | Purpose | Document model |
 |------------|---------|---------------|
+| `users`    | One per Firebase Auth user; created/updated on every sign-in | [user_service.py](src/database/services/user_service.py) |
 | `hazards`  | One per detected road hazard event | [Hazard](src/database/models/hazard.py) |
 | `reports`  | One per formal city report submitted for a hazard | [Report](src/database/models/report.py) |
 
 Collections are flat (no sub-collections). Hazards are owned by a Firebase Auth user via `user_uid`. Reports reference their parent hazard via `hazard_id`.
 
 **Firebase Storage** is used for frame snapshots. Images are stored at `frames/<user_uid>/<filename>` in the configured bucket. The public URL is written back to `hazards.photo_url`.
+
+---
+
+## Collection: `users`
+
+Stores a profile document for every Firebase Auth user. Created automatically on the user's first sign-in; updated on every subsequent sign-in via `upsertUser` (frontend) or `upsert_user` (seed/backend).
+
+### Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `uid` | `string` | ✅ | Firebase Auth UID (same as the Firestore document ID) |
+| `email` | `string` | ❌ | Email address from the auth provider; `null` if unavailable |
+| `display_name` | `string` | ❌ | Display name from the auth provider (e.g. Google full name); `null` if unavailable |
+| `photo_url` | `string` | ❌ | Profile photo URL from the auth provider; `null` if unavailable |
+| `last_seen` | `timestamp` | ✅ | UTC datetime of the most recent sign-in; always updated on every auth event |
+
+> The document ID is always the Firebase Auth UID — no separate `id` field is needed.
+
+### Who writes it
+
+| Writer | When |
+|--------|------|
+| Frontend (`upsertUser` in `services/user.ts`) | Every time `onAuthStateChanged` fires with a non-null user (first login + subsequent logins) |
+| Seed script (`upsert_user` in `user_service.py`) | When seeding local dev data with a fake UID |
+
+### Example Document
+
+```json
+{
+  "uid": "firebase-auth-uid-abc",
+  "email": "jane@example.com",
+  "display_name": "Jane Doe",
+  "photo_url": "https://lh3.googleusercontent.com/...",
+  "last_seen": "2026-02-22T14:00:00Z"
+}
+```
+
+### Service functions — [`user_service.py`](src/database/services/user_service.py)
+
+| Function | Description |
+|----------|-------------|
+| `upsert_user(uid, email, display_name, photo_url)` | Create or merge a user profile document |
+| `get_user(uid)` | Fetch a user profile dict by UID; returns `None` if not found |
 
 ---
 
@@ -218,7 +263,6 @@ hazards/{hazard_id}   (user_uid → Firebase Auth user)
 
 | Collection | Purpose |
 |------------|---------|
-| `users` | User profile data keyed by Firebase Auth UID (display name, preferences, etc.) |
 | `devices` | Registry of known cameras/dashcams with metadata (owner, location, last seen) |
 | `detections` | Raw per-frame ML outputs before the sliding-window alert threshold — useful for analytics or replay |
 

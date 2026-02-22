@@ -10,6 +10,7 @@ from .report_service import (
     get_report,
     get_reports_by_hazard,
 )
+from .user_service import upsert_user, get_user
 from .storage_service import upload_frame
 from .encryption import encrypt, decrypt, validate_encryption_key
 
@@ -24,6 +25,9 @@ __all__ = [
     "create_report",
     "get_report",
     "get_reports_by_hazard",
+    # user
+    "upsert_user",
+    "get_user",
     # storage
     "upload_frame",
     # encryption
