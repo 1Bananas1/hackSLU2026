@@ -4,7 +4,7 @@ Usage (from repo root):
     python src/ML/export_tflite.py
 
 Output:
-    src/ML/best_saved_model/best_float32.tflite   (primary ultralytics output)
+    src/ML/best_saved_model/best_int8.tflite       (primary ultralytics output)
     Vigilane/assets/models/best.tflite             (copied into app bundle)
 
 Output tensor shape (nms=True):
@@ -44,11 +44,11 @@ def export() -> None:
             "Place best.pt from your YOLO training run next to this script."
         )
 
-    print(f"Exporting {MODEL_PATH} → TFLite (imgsz=640, nms=True) …")
+    print(f"Exporting {MODEL_PATH} → TFLite INT8 (imgsz=640, nms=True) …")
     model = YOLO(str(MODEL_PATH))
-    model.export(format="tflite", imgsz=640, nms=True)
+    model.export(format="tflite", imgsz=640, nms=True, int8=True)
 
-    tflite_file = OUTPUT_DIR / "best_float32.tflite"
+    tflite_file = OUTPUT_DIR / "best_int8.tflite"
     if not tflite_file.exists():
         raise FileNotFoundError(
             f"Expected TFLite output not found at {tflite_file}.\n"

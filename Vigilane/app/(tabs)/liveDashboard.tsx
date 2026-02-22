@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
+import { useIsFocused } from '@react-navigation/native';
 import { usePotholeDetector } from '@/hooks/usePotholeDetector';
 import { writeHazard } from '@/services/firestore';
 import { createSession, endSession, createHazard } from '@/services/api';
@@ -31,6 +32,7 @@ function formatElapsed(seconds: number): string {
 }
 
 export default function VigilaneLiveDashboard() {
+  const isFocused = useIsFocused();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const bounceAnim = useRef(new Animated.Value(0)).current;
 
@@ -188,7 +190,7 @@ export default function VigilaneLiveDashboard() {
         <Camera
           style={StyleSheet.absoluteFill}
           device={device}
-          isActive
+          isActive={isFocused}
           frameProcessor={frameProcessor}
           pixelFormat="yuv"
         />

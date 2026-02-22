@@ -50,8 +50,9 @@ export interface Detection {
 export function useRoadDamageDetector() {
   const [detections, setDetections] = useState<Detection[]>([]);
 
-  // Use CoreML on iOS for GPU-accelerated inference; GPU delegate on Android.
-  const delegate = Platform.OS === 'ios' ? 'coreml' : 'gpu';
+  // Use CoreML on iOS for GPU-accelerated inference; CPU on Android (GPU delegate
+  // crashes on emulators — swap to 'gpu' for real-device production builds).
+  const delegate = Platform.OS === 'ios' ? 'coreml' : 'default';
   const model = useTensorflowModel(
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('../assets/models/best.tflite'),
