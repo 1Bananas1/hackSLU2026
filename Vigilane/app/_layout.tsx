@@ -31,7 +31,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       // Already signed in — skip the login screen
       router.replace('/(tabs)/liveDashboard');
     }
-  }, [user, loading, segments]);
+  }, [user, loading, segments, router]);
 
   return <>{children}</>;
 }
