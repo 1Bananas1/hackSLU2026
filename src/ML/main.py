@@ -234,8 +234,7 @@ def parse_args():
         type=str,
         default=None,
         metavar="ID",
-        help="Identifier for this camera/device sent when creating a session "
-        "(default: webcam_<INDEX> or the video filename).",
+        help="Identifier for this camera/device (informational, for logging).",
     )
     parser.add_argument(
         "--auto-confirm",
@@ -271,9 +270,8 @@ def main():
         except Exception as exc:
             print(f"[WARN] Voice confirmation unavailable: {exc}")
 
-    # --- API client + session setup ---
+    # --- API client setup ---
     api_client = None
-    session_id = None
     if args.api_url:
         try:
             from api_client import HazardApiClient
@@ -282,21 +280,7 @@ def main():
                 base_url=args.api_url,
                 auth_token=args.auth_token,
             )
-            # Determine a device identifier for the session record
-            if args.device_id:
-                device_id = args.device_id
-            elif args.webcam is not None:
-                device_id = f"webcam_{args.webcam}"
-            else:
-                device_id = args.video
-            session_id = api_client.create_session(device_id)
-            if session_id:
-                print(f"[INFO] Session started: {session_id}")
-            else:
-                print(
-                    "[WARN] Could not create a backend session. "
-                    "Confirmed hazards will be logged locally only."
-                )
+            print(f"[INFO] API client connected to {args.api_url}")
         except ImportError as exc:
             print(
                 f"[WARN] API client unavailable (missing dependency): {exc}. "
@@ -391,9 +375,8 @@ def main():
 
                     if confirmed:
                         print("[INFO] Detection CONFIRMED.")
-                        if api_client is not None and session_id is not None:
+                        if api_client is not None:
                             api_client.post_hazard(
-                                session_id=session_id,
                                 event_type="pothole",
                                 confidence=current_confidence,
                             )
@@ -433,8 +416,6 @@ def main():
         if show_window:
             cv2.destroyAllWindows()
         # Close the backend session cleanly
-        if api_client is not None and session_id is not None:
-            api_client.end_session(session_id)
         print("[INFO] Done.")
 
 

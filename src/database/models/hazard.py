@@ -5,11 +5,11 @@ Represents a single road hazard detection event (pothole, crack, etc.).
 Maps 1-to-1 with a document in the Firestore 'hazards' collection.
 
 Fields:
-    session_id   — Firestore document ID of the parent Session
+    user_uid     — Firebase Auth UID of the user who created this hazard
     confidence   — model confidence score (0.0 – 1.0)
     labels       — list of class names detected in this frame (e.g. ["pothole"])
     bboxes       — normalised [0,1] bounding boxes [{"x1","y1","x2","y2"}, ...]
-    frame_number — frame index within the session (0-based)
+    frame_number — frame index within the detection run (0-based)
     event_type   — primary hazard category; derived from labels[0] when omitted
     timestamp    — UTC datetime of detection
     photo_url    — Firebase Storage URL of the frame snapshot
@@ -24,7 +24,7 @@ from typing import Dict, List, Optional
 
 @dataclass
 class Hazard:
-    session_id: str
+    user_uid: str
     confidence: float
     labels: List[str] = field(default_factory=list)
     bboxes: List[Dict] = field(default_factory=list)
@@ -45,7 +45,7 @@ class Hazard:
     def to_dict(self) -> dict:
         """Serialize to a plain dict suitable for Firestore."""
         return {
-            "session_id": self.session_id,
+            "user_uid": self.user_uid,
             "confidence": self.confidence,
             "labels": self.labels or [self.event_type],
             "bboxes": self.bboxes or [],
@@ -64,7 +64,7 @@ class Hazard:
         # Back-compat: old docs may only have event_type, not labels.
         event_type = data.get("event_type") or (labels[0] if labels else "")
         return cls(
-            session_id=data["session_id"],
+            user_uid=data["user_uid"],
             confidence=data["confidence"],
             labels=labels,
             bboxes=data.get("bboxes") or [],

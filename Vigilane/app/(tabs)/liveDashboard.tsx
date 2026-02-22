@@ -12,35 +12,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import * as Location from 'expo-location';
-import * as SecureStore from 'expo-secure-store';
 
 import { usePotholeDetector } from '@/hooks/usePotholeDetector';
 import { writeHazard } from '@/services/firestore';
-import { createSession, endSession, createHazard, getSessionHazards } from '@/services/api';
-import type { Hazard, Session } from '@/types';
+import { createHazard } from '@/services/api';
+import type { Hazard } from '@/types';
 import { Toast, useToast } from '@/components/toast';
-
-const POLL_INTERVAL_MS = 3000;
-const USE_BACKEND_POLLING = (process.env.EXPO_PUBLIC_USE_BACKEND_POLLING ?? 'false') === 'true';
-
-const DEVICE_ID_KEY = 'vigilane_device_id_v1';
-
-function randomId(): string {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-async function getOrCreateDeviceId(prefix: string): Promise<string> {
-  try {
-    const existing = await SecureStore.getItemAsync(DEVICE_ID_KEY);
-    if (existing) return existing;
-
-    const created = `${prefix}-${randomId()}`;
-    await SecureStore.setItemAsync(DEVICE_ID_KEY, created);
-    return created;
-  } catch {
-    return `${prefix}-${randomId()}`;
-  }
-}
 
 function formatElapsed(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -57,14 +34,11 @@ export default function VigilaneLiveDashboard() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const bounceAnim = useRef(new Animated.Value(0)).current;
 
-  const [session, setSession] = useState<Session | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
   const [latestHazard, setLatestHazard] = useState<Hazard | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [reporting, setReporting] = useState(false);
-  const [sessionLoading, setSessionLoading] = useState(false);
   const { toast, showToast } = useToast();
-
-  const [deviceId, setDeviceId] = useState<string | null>(null);
 
   // ── Camera ────────────────────────────────────────────────────────────────
   const { hasPermission, requestPermission } = useCameraPermission();
@@ -77,13 +51,6 @@ export default function VigilaneLiveDashboard() {
     if (speedMps == null || speedMps < 0) return '—';
     return `${Math.round(mphFromMetersPerSecond(speedMps))} mph`;
   }, [speedMps]);
-
-  useEffect(() => {
-    void (async () => {
-      const id = await getOrCreateDeviceId(`${Platform.OS}_dashcam`);
-      setDeviceId(id);
-    })();
-  }, []);
 
   // Request camera permission on mount.
   useEffect(() => {
@@ -139,85 +106,32 @@ export default function VigilaneLiveDashboard() {
     ).start();
   }, [pulseAnim, bounceAnim]);
 
-  // End session on unmount if one is active
+  // Recording timer — only ticks while recording is active
   useEffect(() => {
-    return () => {
-      setSession((s) => {
-        if (s) endSession(s.id).catch(() => {});
-        return null;
-      });
-    };
-  }, []);
-
-  // Recording timer — only ticks while a session is active
-  useEffect(() => {
-    if (!session) return;
+    if (!isRecording) return;
     const timer = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
     return () => clearInterval(timer);
-  }, [session]);
+  }, [isRecording]);
 
-  const handleToggleSession = async () => {
-    if (sessionLoading) return;
-    if (!deviceId) {
-      showToast('Device ID not ready yet', 'info');
-      return;
-    }
-
-    setSessionLoading(true);
-    try {
-      if (session) {
-        await endSession(session.id);
-        setSession(null);
-        setLatestHazard(null);
-        setElapsedSeconds(0);
-        showToast('Session ended', 'info');
-      } else {
-        const s = await createSession(deviceId);
-        setSession(s);
-        showToast('Session started', 'success');
-      }
-    } catch (err) {
-      console.error('Session toggle failed:', err);
-      showToast('Session error — check connection', 'error');
-    } finally {
-      setSessionLoading(false);
+  const handleToggleSession = () => {
+    if (isRecording) {
+      setIsRecording(false);
+      setLatestHazard(null);
+      setElapsedSeconds(0);
+      showToast('Recording stopped', 'info');
+    } else {
+      setIsRecording(true);
+      showToast('Recording started', 'success');
     }
   };
 
-  // Optional backend polling: keeps API endpoint relevant for hybrid mode.
-  const pollHazards = useCallback(async () => {
-    if (!session) return;
-    try {
-      const hazards = await getSessionHazards(session.id);
-      if (!hazards || hazards.length === 0) return;
-
-      const newest = hazards[hazards.length - 1];
-      setLatestHazard((prev) => {
-        if (!prev) return newest;
-
-        const prevTs = new Date(prev.timestamp).getTime();
-        const newTs = new Date(newest.timestamp).getTime();
-        return newTs > prevTs ? newest : prev;
-      });
-    } catch {
-      // ignore
-    }
-  }, [session]);
-
-  useEffect(() => {
-    if (!session || !USE_BACKEND_POLLING) return;
-    void pollHazards();
-    const interval = setInterval(() => void pollHazards(), POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [session, pollHazards]);
-
   // ── On-device detection handler ───────────────────────────────────────────
   useEffect(() => {
-    if (!lastAlert || !session) return;
+    if (!lastAlert || !isRecording) return;
 
     const localHazard: Hazard = {
       id: `local-${lastAlert.timestamp}`,
-      session_id: session.id,
+      user_uid: '',           // local-only placeholder; real uid written inside writeHazard
       event_type: lastAlert.labels[0] ?? 'pothole',
       confidence: lastAlert.confidence,
       labels: lastAlert.labels,
@@ -229,7 +143,7 @@ export default function VigilaneLiveDashboard() {
 
     setLatestHazard(localHazard);
 
-    void writeHazard(session.id, {
+    void writeHazard({
       confidence: lastAlert.confidence,
       bboxes: lastAlert.bboxes,
       labels: lastAlert.labels,
@@ -238,15 +152,14 @@ export default function VigilaneLiveDashboard() {
 
     const clearTimer = setTimeout(() => setLatestHazard(null), 30_000);
     return () => clearTimeout(clearTimer);
-  }, [lastAlert, session]);
+  }, [lastAlert, isRecording]);
 
   // ── Manual report button ──────────────────────────────────────────────────
   const handleReportHazard = async () => {
-    if (reporting || !session) return;
+    if (reporting) return;
     setReporting(true);
     try {
       const newHazard = await createHazard({
-        session_id: session.id,
         confidence: 1.0,
         labels: ['manual'],
         bboxes: [],
@@ -302,15 +215,15 @@ export default function VigilaneLiveDashboard() {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.topBar}>
           <View style={styles.glassPanel}>
-            <MaterialIcons name="verified-user" size={20} color={session ? '#34d399' : '#94a3b8'} />
+            <MaterialIcons name="verified-user" size={20} color={isRecording ? '#34d399' : '#94a3b8'} />
             <View style={styles.statusTextContainer}>
               <Text style={styles.statusTitle}>Vigilane</Text>
-              <Text style={styles.statusSubtitle}>{session ? 'SESSION LIVE' : 'NO ACTIVE SESSION'}</Text>
+              <Text style={styles.statusSubtitle}>{isRecording ? 'RECORDING' : 'STANDBY'}</Text>
             </View>
           </View>
 
           <View style={[styles.glassPanel, styles.recPanel]}>
-            {session ? (
+            {isRecording ? (
               <>
                 <Animated.View style={[styles.pulsingDot, { transform: [{ scale: pulseAnim }] }]} />
                 <Text style={styles.recText}>REC {formatElapsed(elapsedSeconds)}</Text>
@@ -373,22 +286,20 @@ export default function VigilaneLiveDashboard() {
             <TouchableOpacity
               style={[
                 styles.sessionButton,
-                session ? styles.sessionButtonStop : styles.sessionButtonStart,
-                sessionLoading && styles.reportButtonDisabled,
+                isRecording ? styles.sessionButtonStop : styles.sessionButtonStart,
               ]}
               activeOpacity={0.8}
               onPress={handleToggleSession}
-              disabled={sessionLoading}
             >
-              <MaterialIcons name={session ? 'stop-circle' : 'play-circle-filled'} size={28} color="#fff" />
-              <Text style={styles.reportButtonText}>{sessionLoading ? '…' : session ? 'Stop' : 'Start'}</Text>
+              <MaterialIcons name={isRecording ? 'stop-circle' : 'play-circle-filled'} size={28} color="#fff" />
+              <Text style={styles.reportButtonText}>{isRecording ? 'Stop' : 'Start'}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.reportButton, (reporting || !session) && styles.reportButtonDisabled]}
+              style={[styles.reportButton, reporting && styles.reportButtonDisabled]}
               activeOpacity={0.8}
               onPress={handleReportHazard}
-              disabled={reporting || !session}
+              disabled={reporting}
             >
               <MaterialIcons name="add-alert" size={28} color="#fff" />
               <Text style={styles.reportButtonText}>{reporting ? 'Reporting…' : 'Report Hazard'}</Text>

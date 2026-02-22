@@ -4,13 +4,13 @@
  * Persists confirmed hazard detections directly to Cloud Firestore.
  *
  * Schema matches src/database/models/hazard.py:
- *   session_id, confidence, labels, bboxes, frame_number, timestamp,
+ *   user_uid, confidence, labels, bboxes, frame_number, timestamp,
  *   status, photo_url, location
  */
 
-import { addDoc, collection, doc, increment, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 
-import { db } from './firebase';
+import { auth, db } from './firebase';
 import type { BoundingBox } from '@/types';
 
 export interface WriteHazardInput {
@@ -18,17 +18,26 @@ export interface WriteHazardInput {
   bboxes: BoundingBox[];
   labels: string[];
   frameNumber?: number;
+  location?: { lat: number; lng: number } | null;
 }
 
 /**
+ * Write a confirmed on-device detection directly to Firestore.
+ * user_uid is taken from the currently signed-in Firebase user.
  * Never throws — failures are swallowed so detection never blocks on I/O.
  */
-export async function writeHazard(sessionId: string, input: WriteHazardInput): Promise<void> {
-  const { confidence, bboxes, labels, frameNumber = 0 } = input;
+export async function writeHazard(input: WriteHazardInput): Promise<void> {
+  const { confidence, bboxes, labels, frameNumber = 0, location = null } = input;
+
+  const uid = auth.currentUser?.uid;
+  if (!uid) {
+    if (__DEV__) console.warn('[firestore] writeHazard: no authenticated user');
+    return;
+  }
 
   try {
     const ref = await addDoc(collection(db, 'hazards'), {
-      session_id: sessionId,
+      user_uid: uid,
       confidence,
       labels,
       bboxes,
@@ -36,11 +45,7 @@ export async function writeHazard(sessionId: string, input: WriteHazardInput): P
       timestamp: serverTimestamp(),
       status: 'pending',
       photo_url: null,
-      location: null,
-    });
-
-    await updateDoc(doc(db, 'sessions', sessionId), {
-      hazard_count: increment(1),
+      location,
     });
 
     if (__DEV__) console.debug('[firestore] hazard written', ref.id);
