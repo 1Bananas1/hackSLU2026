@@ -16,8 +16,8 @@ from datetime import datetime, timedelta, timezone
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 from src.database.models.hazard import Hazard
-from src.database.services.hazard_service import save_hazard
-from src.database.services.user_service import upsert_user
+from src.api.services.hazard_service import save_hazard
+from src.api.services.user_service import upsert_user
 
 # A stable fake UID that represents a test user.
 # Replace with a real Firebase Auth UID to seed data for an actual account.

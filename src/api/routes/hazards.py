@@ -28,16 +28,16 @@ POST /hazards accepts:
 
 from flask import Blueprint, g, jsonify, request
 
-from src.api.auth import require_auth
+from src.api.middleware.auth import require_auth
 from src.database.models.hazard import Hazard
-from src.database.services.hazard_service import (
+from src.api.services.hazard_service import (
     delete_hazard,
     get_hazard,
     get_hazards_by_user,
     save_hazard,
     update_hazard_status,
 )
-from src.database.services.report_service import create_report
+from src.api.services.report_service import create_report
 
 hazards_bp = Blueprint("hazards", __name__)
 

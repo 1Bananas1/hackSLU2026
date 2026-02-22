@@ -26,11 +26,11 @@ TEST_UID = "test-uid-123"
 def app():
     """Create a test Flask app with Firebase and Firestore mocked out."""
     with (
-        patch("src.api.initialize_firebase"),
-        patch("src.api.validate_encryption_key"),
+        patch("src.database.config.initialize_firebase"),
+        patch("src.api.services.encryption.validate_encryption_key"),
         patch("flask_cors.CORS"),
     ):
-        from src.api import create_app
+        from src.api.main import create_app
 
         flask_app = create_app()
         flask_app.config["TESTING"] = True

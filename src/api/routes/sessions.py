@@ -9,8 +9,8 @@ Endpoints:
 
 from flask import Blueprint, jsonify, request
 
-from src.database.services.session_service import create_session, end_session, get_session
-from src.database.services.hazard_service import get_hazards_by_session
+from src.api.services.session_service import create_session, end_session, get_session
+from src.api.services.hazard_service import get_hazards_by_session
 
 sessions_bp = Blueprint("sessions", __name__)
 

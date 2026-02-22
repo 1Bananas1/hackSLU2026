@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -m compileall:*)"
-    ]
+      "Bash(tree:*)",
+      "Bash(python3:*)"
+    ],
+    "deny": [],
+    "ask": []
   }
 }
