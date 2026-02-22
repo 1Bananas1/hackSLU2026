@@ -20,7 +20,6 @@ class Hazard:
     photo_url: Optional[str] = None
     location: Optional[Dict[str, float]] = None  # {"lat": ..., "lng": ...}
     status: str = "pending"  # "pending" | "reported" | "dismissed"
-    user_uid: Optional[str] = None  # Firebase UID of the user who reported this hazard
     id: Optional[str] = None  # populated after Firestore write
 
     def __post_init__(self) -> None:
@@ -40,7 +39,6 @@ class Hazard:
             "photo_url": self.photo_url,
             "location": self.location,
             "status": self.status,
-            "user_uid": self.user_uid,
         }
 
     @classmethod
@@ -60,6 +58,5 @@ class Hazard:
             photo_url=data.get("photo_url"),
             location=data.get("location"),
             status=data.get("status", "pending"),
-            user_uid=data.get("user_uid"),
             id=doc_id,
         )
