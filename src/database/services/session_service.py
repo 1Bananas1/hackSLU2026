@@ -1,81 +1,80 @@
-"""
-CRUD operations for the 'sessions' Firestore collection.
+from __future__ import annotations
 
-A Session is created when a dashcam recording starts and closed when it ends.
-Hazard count is incremented atomically on the server side via Firestore's
-Increment transform — safe under concurrent writes.
-
-Typical usage from the Flask backend:
-
-    from src.database.services import create_session, end_session, increment_hazard_count
-
-    session = create_session(device_id="webcam_0")
-    # ... during detection loop ...
-    increment_hazard_count(session.id)
-    # ... on shutdown ...
-    end_session(session.id)
-"""
-
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Optional
 
-from google.cloud.firestore import Query
-from google.cloud.firestore_v1 import Increment
+from src.database.client import db
 
-from ..client import db
-from ..models.session import Session
 
-COLLECTION = "sessions"
+@dataclass
+class Session:
+    id: str
+    device_id: str
+    status: str = "active"  # "active" | "ended"
+    created_at: datetime = datetime.now(timezone.utc)
+    ended_at: Optional[datetime] = None
+    hazard_count: int = 0
+
+
+SESSIONS_COLLECTION = "sessions"
 
 
 def create_session(device_id: str) -> Session:
     """
-    Create and persist a new Session. Returns the Session with its id populated.
-    Call this once when the dashcam feed starts.
+    Create a new session document in Firestore.
     """
-    session = Session(device_id=device_id)
-    doc_ref = db.collection(COLLECTION).document()
-    doc_ref.set(session.to_dict())
-    session.id = doc_ref.id
-    return session
+    doc_ref = db.collection(SESSIONS_COLLECTION).document()
+    now = datetime.now(timezone.utc)
+    data = {
+        "device_id": device_id,
+        "status": "active",
+        "created_at": now,
+        "ended_at": None,
+        "hazard_count": 0,
+    }
+    doc_ref.set(data)
+    return Session(id=doc_ref.id, device_id=device_id, status="active", created_at=now, hazard_count=0)
 
 
 def get_session(session_id: str) -> Optional[Session]:
-    """Fetch a single Session by document ID. Returns None if not found."""
-    doc = db.collection(COLLECTION).document(session_id).get()
-    if not doc.exists:
+    """
+    Fetch a session by ID. Returns None if missing.
+    """
+    snap = db.collection(SESSIONS_COLLECTION).document(session_id).get()
+    if not snap.exists:
         return None
-    return Session.from_dict(doc.to_dict(), doc.id)
 
-
-def end_session(session_id: str) -> None:
-    """
-    Mark a session as completed and record its end time.
-    Call this when the dashcam feed stops.
-    """
-    db.collection(COLLECTION).document(session_id).update(
-        {
-            "end_time": datetime.now(timezone.utc),
-            "status": "completed",
-        }
+    data = snap.to_dict() or {}
+    return Session(
+        id=snap.id,
+        device_id=data.get("device_id", ""),
+        status=data.get("status", "active"),
+        created_at=data.get("created_at") or datetime.now(timezone.utc),
+        ended_at=data.get("ended_at"),
+        hazard_count=int(data.get("hazard_count", 0)),
     )
 
 
 def increment_hazard_count(session_id: str) -> None:
     """
-    Atomically increment the session's hazard_count by 1.
-    Call this each time save_hazard() succeeds so totals stay in sync.
+    Increment hazard_count for the session.
     """
-    db.collection(COLLECTION).document(session_id).update(
-        {"hazard_count": Increment(1)}
-    )
+    doc_ref = db.collection(SESSIONS_COLLECTION).document(session_id)
+    snap = doc_ref.get()
+    if not snap.exists:
+        return
+
+    data = snap.to_dict() or {}
+    current = int(data.get("hazard_count", 0))
+    doc_ref.update({"hazard_count": current + 1})
 
 
-def get_all_sessions() -> List[Session]:
-    """Return all sessions, newest first."""
-    docs = (
-        db.collection(COLLECTION)
-        .order_by("start_time", direction=Query.DESCENDING)
-        .stream()
-    )
-    return [Session.from_dict(doc.to_dict(), doc.id) for doc in docs]
+def end_session(session_id: str) -> None:
+    """
+    Mark session ended.
+    """
+    doc_ref = db.collection(SESSIONS_COLLECTION).document(session_id)
+    if not doc_ref.get().exists:
+        return
+    doc_ref.update({"status": "ended", "ended_at": datetime.now(timezone.utc)})

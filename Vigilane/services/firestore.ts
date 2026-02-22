@@ -75,6 +75,8 @@ export interface WriteHazardInput {
 }
 
 /**
+ * Write a confirmed on-device detection directly to Firestore.
+ * user_uid is taken from the currently signed-in Firebase user.
  * Never throws — failures are swallowed so detection never blocks on I/O.
  */
 export async function writeHazard(sessionId: string, input: WriteHazardInput): Promise<void> {
@@ -91,11 +93,7 @@ export async function writeHazard(sessionId: string, input: WriteHazardInput): P
       timestamp: serverTimestamp(),
       status: 'pending',
       photo_url: null,
-      location: null,
-    });
-
-    await updateDoc(doc(db, 'sessions', sessionId), {
-      hazard_count: increment(1),
+      location,
     });
 
     console.log('[firestore] hazard written', ref.id);

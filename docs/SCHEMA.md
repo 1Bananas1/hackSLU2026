@@ -11,76 +11,76 @@
 
 | Collection | Purpose | Document model |
 |------------|---------|---------------|
-| `sessions` | One per dashcam recording run | [Session](src/database/models/session.py) |
+| `users`    | One per Firebase Auth user; created/updated on every sign-in | [user_service.py](src/database/services/user_service.py) |
 | `hazards`  | One per detected road hazard event | [Hazard](src/database/models/hazard.py) |
 | `reports`  | One per formal city report submitted for a hazard | [Report](src/database/models/report.py) |
 
-Collections are flat (no sub-collections). Hazards reference their parent session via `session_id`. Reports reference their parent hazard via `hazard_id`.
+Collections are flat (no sub-collections). Hazards are owned by a Firebase Auth user via `user_uid`. Reports reference their parent hazard via `hazard_id`.
 
-**Firebase Storage** is used for frame snapshots. Images are stored at `frames/<session_id>/<filename>` in the configured bucket. The public URL is written back to `hazards.photo_url`.
+**Firebase Storage** is used for frame snapshots. Images are stored at `frames/<user_uid>/<filename>` in the configured bucket. The public URL is written back to `hazards.photo_url`.
 
 ---
 
-## Collection: `sessions`
+## Collection: `users`
 
-Represents a single continuous dashcam recording run, from start to stop.
+Stores a profile document for every Firebase Auth user. Created automatically on the user's first sign-in; updated on every subsequent sign-in via `upsertUser` (frontend) or `upsert_user` (seed/backend).
 
 ### Fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `device_id` | `string` | ✅ | Camera source identifier (e.g. `"webcam_0"`, `"dashcam.mp4"`) |
-| `start_time` | `timestamp` | ✅ | UTC datetime when the session was created |
-| `status` | `string` | ✅ | `"active"` while recording, `"completed"` after `end_session()` |
-| `hazard_count` | `integer` | ✅ | Running total of hazards detected; starts at `0`, incremented atomically via Firestore `Increment` |
-| `end_time` | `timestamp` | ❌ | UTC datetime when the session ended; `null`/absent while active |
+| `uid` | `string` | ✅ | Firebase Auth UID (same as the Firestore document ID) |
+| `email` | `string` | ❌ | Email address from the auth provider; `null` if unavailable |
+| `display_name` | `string` | ❌ | Display name from the auth provider (e.g. Google full name); `null` if unavailable |
+| `photo_url` | `string` | ❌ | Profile photo URL from the auth provider; `null` if unavailable |
+| `last_seen` | `timestamp` | ✅ | UTC datetime of the most recent sign-in; always updated on every auth event |
 
-> `id` is the auto-generated Firestore document ID — never stored as a field inside the document.
+> The document ID is always the Firebase Auth UID — no separate `id` field is needed.
 
-### Indexes / Frequent Queries
+### Who writes it
 
-| Query | Fields indexed |
-|-------|---------------|
-| All sessions, newest first | `start_time DESC` (single-field, Firestore default) |
-| Fetch one session by ID | document ID lookup — no index needed |
+| Writer | When |
+|--------|------|
+| Frontend (`upsertUser` in `services/user.ts`) | Every time `onAuthStateChanged` fires with a non-null user (first login + subsequent logins) |
+| Seed script (`upsert_user` in `user_service.py`) | When seeding local dev data with a fake UID |
 
 ### Example Document
 
 ```json
 {
-  "device_id": "webcam_0",
-  "start_time": "2026-02-21T14:00:00Z",
-  "end_time": "2026-02-21T14:12:47Z",
-  "hazard_count": 3,
-  "status": "completed"
+  "uid": "firebase-auth-uid-abc",
+  "email": "jane@example.com",
+  "display_name": "Jane Doe",
+  "photo_url": "https://lh3.googleusercontent.com/...",
+  "last_seen": "2026-02-22T14:00:00Z"
 }
 ```
 
-### Service functions — [`session_service.py`](src/database/services/session_service.py)
+### Service functions — [`user_service.py`](src/database/services/user_service.py)
 
 | Function | Description |
 |----------|-------------|
-| `create_session(device_id)` | Creates and persists a new active session |
-| `get_session(session_id)` | Fetch one session by document ID |
-| `get_all_sessions()` | All sessions, newest first |
-| `increment_hazard_count(session_id)` | Atomically increments `hazard_count` by 1 |
-| `end_session(session_id)` | Sets `end_time = now` and `status = "completed"` |
+| `upsert_user(uid, email, display_name, photo_url)` | Create or merge a user profile document |
+| `get_user(uid)` | Fetch a user profile dict by UID; returns `None` if not found |
 
 ---
 
 ## Collection: `hazards`
 
-Represents a single road-hazard detection event emitted by the ML pipeline.
+Represents a single road-hazard detection event emitted by the ML pipeline or reported directly by a user.
 
 ### Fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `session_id` | `string` | ✅ | Firestore document ID of the parent `sessions` document |
-| `event_type` | `string` | ✅ | Hazard category (e.g. `"pothole"`, `"crack"`) |
-| `confidence` | `float` | ✅ | Fraction of sliding-window frames that fired (range `0.0 – 1.0`) |
-| `timestamp` | `timestamp` | ✅ | UTC datetime of detection |
-| `status` | `string` | ✅ | Lifecycle state: `"pending"` → `"reported"` or `"dismissed"`; defaults to `"pending"` |
+| `user_uid` | `string` | ✅ | Firebase Auth UID of the user who owns this hazard; always set server-side from the auth token — never accepted from the client |
+| `event_type` | `string` | ✅ | Hazard category (e.g. `"pothole"`, `"alligator cracking"`); derived from `labels[0]` if not provided |
+| `confidence` | `float` | ✅ | Detection confidence score (range `0.0 – 1.0`) |
+| `labels` | `string[]` | ✅ | Non-empty list of detected hazard labels (e.g. `["pothole"]`) |
+| `bboxes` | `map[]` | ❌ | Bounding boxes `[{x1, y1, x2, y2}]` (normalised 0–1); empty list if not available |
+| `frame_number` | `integer` | ✅ | 0-based frame index; defaults to `0` |
+| `timestamp` | `timestamp` | ✅ | UTC datetime of detection; always set server-side |
+| `status` | `string` | ✅ | Lifecycle state: `"pending"` → `"reported"` or `"dismissed"`; always `"pending"` on creation |
 | `photo_url` | `string` | ❌ | Firebase Storage URL of the frame snapshot; `null` if no photo was captured |
 | `location` | `map` | ❌ | GPS coordinates at time of detection: `{"lat": float, "lng": float}`; `null` if unavailable |
 
@@ -92,11 +92,20 @@ Represents a single road-hazard detection event emitted by the ML pipeline.
 { "lat": 38.6270, "lng": -90.1994 }
 ```
 
-#### `status` values
+Valid ranges: `lat` in `[-90, 90]`, `lng` in `[-180, 180]`. The API returns `400` if values are out of range.
+
+#### `status` state machine
+
+```
+CREATE → "pending"
+"pending"  → "dismissed"  (POST /hazards/<id>/dismiss — owner only)
+"pending"  → "reported"   (POST /hazards/<id>/report — any authenticated user)
+All other transitions → 409
+```
 
 | Value | Meaning |
 |-------|---------|
-| `"pending"` | Detected by ML, not yet reviewed |
+| `"pending"` | Detected by ML or reported by user, not yet reviewed |
 | `"reported"` | Confirmed and submitted to city/authority |
 | `"dismissed"` | Marked as a false positive or duplicate |
 
@@ -104,20 +113,22 @@ Represents a single road-hazard detection event emitted by the ML pipeline.
 
 | Query | Fields indexed |
 |-------|---------------|
-| Hazards for a session, oldest first | **Composite:** `session_id ASC, timestamp ASC` — must be created in Firestore console (Firestore prints the creation link on the first query if missing) |
-| All hazards, newest first | `timestamp DESC` (single-field, Firestore default) |
+| User's hazards, newest first | **Composite:** `user_uid ASC, timestamp DESC` — **must be created in Firestore console before deploying** |
 | Fetch one hazard by ID | document ID lookup — no index needed |
 
 ### Example Document
 
 ```json
 {
-  "session_id": "abc123XYZfirestore",
+  "user_uid": "firebase-auth-uid-abc",
   "event_type": "pothole",
   "confidence": 0.85,
+  "labels": ["pothole"],
+  "bboxes": [{ "x1": 0.12, "y1": 0.20, "x2": 0.30, "y2": 0.38 }],
+  "frame_number": 7,
   "timestamp": "2026-02-21T14:03:15Z",
   "status": "pending",
-  "photo_url": "https://storage.googleapis.com/your-bucket/frames/abc123.jpg",
+  "photo_url": "https://storage.googleapis.com/your-bucket/frames/uid-abc/frame_0050.jpg",
   "location": { "lat": 38.6270, "lng": -90.1994 }
 }
 ```
@@ -128,8 +139,7 @@ Represents a single road-hazard detection event emitted by the ML pipeline.
 |----------|-------------|
 | `save_hazard(hazard)` | Writes a new hazard document; returns the document ID |
 | `get_hazard(hazard_id)` | Fetch one hazard by document ID |
-| `get_hazards_by_session(session_id)` | All hazards for a session, ascending by timestamp |
-| `get_all_hazards()` | All hazards, newest first |
+| `get_hazards_by_user(user_uid)` | All hazards owned by a user, newest first (requires composite index) |
 | `delete_hazard(hazard_id)` | Permanently deletes a hazard document |
 | `update_hazard_status(hazard_id, status)` | Sets `status` to `"pending"`, `"reported"`, or `"dismissed"` |
 
@@ -213,8 +223,8 @@ When a user submits `POST /hazards/<id>/report`, the following information is co
 
 Frame snapshots are uploaded to Firebase Storage by [`storage_service.py`](src/database/services/storage_service.py).
 
-**Storage path:** `frames/<session_id>/<filename>`
-**Example URL:** `https://storage.googleapis.com/<bucket>/frames/abc123/frame_0050.jpg`
+**Storage path:** `frames/<user_uid>/<filename>`
+**Example URL:** `https://storage.googleapis.com/<bucket>/frames/firebase-auth-uid-abc/frame_0050.jpg`
 
 The returned public URL is stored in `hazards.photo_url`.
 
@@ -222,22 +232,20 @@ The returned public URL is stored in `hazards.photo_url`.
 
 | Function | Description |
 |----------|-------------|
-| `upload_frame(image_bytes, session_id, filename)` | Uploads a JPEG to Storage and returns its public URL |
+| `upload_frame(image_bytes, user_uid, filename)` | Uploads a JPEG to Storage and returns its public URL |
 
 ---
 
 ## Relationships
 
 ```
-sessions/{session_id}
-    └── (referenced by) hazards/{hazard_id}.session_id
-                            └── (referenced by) reports/{report_id}.hazard_id
+hazards/{hazard_id}   (user_uid → Firebase Auth user)
+    └── (referenced by) reports/{report_id}.hazard_id
 ```
 
-- One `session` → many `hazards` (1-to-many).
+- One Firebase Auth user → many `hazards` (1-to-many, via `user_uid` field).
 - One `hazard` → many `reports` (1-to-many, typically 1).
-- All three collections are flat (no Firestore sub-collections); relationships use foreign key fields.
-- `sessions.hazard_count` is a denormalized count kept in sync via `increment_hazard_count()` — avoids an expensive collection count query at read time.
+- Both collections are flat (no Firestore sub-collections); relationships use foreign key fields.
 
 ---
 
@@ -257,7 +265,6 @@ sessions/{session_id}
 |------------|---------|
 | `devices` | Registry of known cameras/dashcams with metadata (owner, location, last seen) |
 | `detections` | Raw per-frame ML outputs before the sliding-window alert threshold — useful for analytics or replay |
-| `users` | If multi-user auth is added (Firebase Auth UIDs as document IDs) |
 
 ---
 
@@ -267,7 +274,9 @@ Create these indexes in the Firestore console (or via `firestore.indexes.json`):
 
 | Collection | Field 1 | Order | Field 2 | Order | Used by |
 |------------|---------|-------|---------|-------|---------|
-| `hazards` | `session_id` | ASC | `timestamp` | ASC | `get_hazards_by_session()` |
+| `hazards` | `user_uid` | ASC | `timestamp` | DESC | `get_hazards_by_user()` — user's hazards, newest first |
 | `reports` | `hazard_id` | ASC | `submitted_at` | ASC | `get_reports_by_hazard()` |
+
+> **Important:** The `(user_uid ASC, timestamp DESC)` index must be created **before** deploying the API. Without it, the first `GET /hazards` call will throw a Firestore error with a direct link to create the missing index.
 
 Firestore prints a direct creation link in the console on the first query if an index is missing.
