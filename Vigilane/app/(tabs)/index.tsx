@@ -6,11 +6,10 @@ import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
-import { createHazard, createSession, endSession, getSessionHazards, type Hazard } from '@/services/api';
+import { createHazard, getHazards, type Hazard } from '@/services/api';
 
 export default function HomeScreen() {
   const [loading, setLoading] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const [hazards, setHazards] = useState<Hazard[]>([]);
   const [message, setMessage] = useState('Ready');
 
@@ -26,21 +25,9 @@ export default function HomeScreen() {
     }
   };
 
-  const handleStartSession = () =>
-    runAction(async () => {
-      const session = await createSession('mobile_app');
-      setSessionId(session.id);
-      setMessage(`Session started: ${session.id}`);
-    });
-
   const handleCreateHazard = () =>
     runAction(async () => {
-      if (!sessionId) {
-        setMessage('Start a session first');
-        return;
-      }
       const hazard = await createHazard({
-        session_id: sessionId,
         confidence: 0.87,
         labels: ['pothole'],
         bboxes: [{ x1: 120, y1: 200, x2: 300, y2: 380 }],
@@ -52,24 +39,9 @@ export default function HomeScreen() {
 
   const handleLoadHazards = () =>
     runAction(async () => {
-      if (!sessionId) {
-        setMessage('Start a session first');
-        return;
-      }
-      const items = await getSessionHazards(sessionId);
+      const items = await getHazards();
       setHazards(items);
       setMessage(`Loaded ${items.length} hazards`);
-    });
-
-  const handleEndSession = () =>
-    runAction(async () => {
-      if (!sessionId) {
-        setMessage('No active session');
-        return;
-      }
-      await endSession(sessionId);
-      setMessage('Session ended');
-      setSessionId(null);
     });
 
   return (
@@ -88,18 +60,10 @@ export default function HomeScreen() {
       <ThemedView style={styles.stepContainer}>
         <ThemedText type="subtitle">Backend Controls</ThemedText>
         <ThemedText>Status: {message}</ThemedText>
-        <ThemedText>Session: {sessionId ?? 'none'}</ThemedText>
         <ThemedText>Hazards: {hazards.length}</ThemedText>
       </ThemedView>
 
       <ThemedView style={styles.stepContainer}>
-        <TouchableOpacity
-          style={styles.button}
-          disabled={loading}
-          onPress={handleStartSession}>
-          <ThemedText style={styles.buttonText}>Start Session</ThemedText>
-        </TouchableOpacity>
-
         <TouchableOpacity
           style={styles.button}
           disabled={loading}
@@ -111,14 +75,7 @@ export default function HomeScreen() {
           style={styles.button}
           disabled={loading}
           onPress={handleLoadHazards}>
-          <ThemedText style={styles.buttonText}>Load Hazards</ThemedText>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.button}
-          disabled={loading}
-          onPress={handleEndSession}>
-          <ThemedText style={styles.buttonText}>End Session</ThemedText>
+          <ThemedText style={styles.buttonText}>Load My Hazards</ThemedText>
         </TouchableOpacity>
       </ThemedView>
 
