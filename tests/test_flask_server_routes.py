@@ -101,7 +101,9 @@ def test_create_hazard_forces_pending_status(client, monkeypatch):
 
 
 def test_create_hazard_success(client, monkeypatch):
-    monkeypatch.setattr("src.api.routes.hazards.save_hazard", lambda _hazard: "hazard-1")
+    monkeypatch.setattr(
+        "src.api.routes.hazards.save_hazard", lambda _hazard: "hazard-1"
+    )
 
     response = client.post(
         "/hazards",

@@ -50,7 +50,9 @@ def require_auth(f: F) -> F:
         try:
             import firebase_admin.auth as firebase_auth  # type: ignore
         except ModuleNotFoundError:
-            return jsonify({"error": "Authentication unavailable (firebase-admin not installed)"}), 401
+            return jsonify(
+                {"error": "Authentication unavailable (firebase-admin not installed)"}
+            ), 401
 
         try:
             decoded = firebase_auth.verify_id_token(token)

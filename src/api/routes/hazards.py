@@ -79,7 +79,9 @@ def create_hazard():
         lat = location.get("lat")
         lng = location.get("lng")
         if not isinstance(lat, (int, float)) or not isinstance(lng, (int, float)):
-            return jsonify({"error": "location.lat and location.lng must be numbers"}), 400
+            return jsonify(
+                {"error": "location.lat and location.lng must be numbers"}
+            ), 400
         if not (-90 <= lat <= 90) or not (-180 <= lng <= 180):
             return jsonify({"error": "location out of valid range"}), 400
 
@@ -89,7 +91,9 @@ def create_hazard():
         labels=labels,
         bboxes=data.get("bboxes", []),
         frame_number=int(data.get("frame_number", 0)),
-        event_type=data.get("event_type", ""),  # derived from labels[0] in __post_init__
+        event_type=data.get(
+            "event_type", ""
+        ),  # derived from labels[0] in __post_init__
         photo_url=data.get("photo_url"),
         location=location,
         status="pending",  # always forced; ignore client-provided status
