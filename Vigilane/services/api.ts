@@ -63,7 +63,7 @@ export function getHazards(): Promise<Hazard[]> {
 
 /** GET /hazards/<id> — fetch one hazard */
 export function getHazard(id: string): Promise<Hazard> {
-  return request<Hazard>(`/api/hazards/${id}`);
+  return request<Hazard>(`/hazards/${id}`);
 }
 
 /**
@@ -71,7 +71,7 @@ export function getHazard(id: string): Promise<Hazard> {
  * user_uid is set server-side from the auth token; do not include it in payload.
  */
 export function createHazard(payload: CreateHazardPayload): Promise<Hazard> {
-  return request<Hazard>('/api/hazards', {
+  return request<Hazard>('/hazards', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -79,7 +79,7 @@ export function createHazard(payload: CreateHazardPayload): Promise<Hazard> {
 
 /** DELETE /hazards/<id> — permanently delete a hazard (owner only) */
 export function deleteHazard(id: string): Promise<{ message: string; hazard_id: string }> {
-  return request<{ message: string; hazard_id: string }>(`/api/hazards/${id}`, {
+  return request<{ message: string; hazard_id: string }>(`/hazards/${id}`, {
     method: 'DELETE',
   });
 }
