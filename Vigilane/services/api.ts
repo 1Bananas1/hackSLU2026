@@ -27,7 +27,12 @@ async function getAuthToken(): Promise<string> {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = await getAuthToken();
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const url = `${BASE_URL}${path}`;
+
+  console.log(`[API] Request: ${options.method || 'GET'} ${url}`);
+  console.log(`[API] Auth token: ${token ? 'Present' : 'Missing'}`);
+
+  const res = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -35,11 +40,18 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       ...(options.headers ?? {}),
     },
   });
+
+  console.log(`[API] Response status: ${res.status} ${res.statusText}`);
+
   if (!res.ok) {
     const body = await res.text();
+    console.error(`[API] Error response: ${body}`);
     throw new Error(`API ${res.status} ${res.statusText}: ${body}`);
   }
-  return res.json() as Promise<T>;
+
+  const data = await res.json() as Promise<T>;
+  console.log(`[API] Response received successfully`);
+  return data;
 }
 
 // ---------------------------------------------------------------------------
@@ -56,9 +68,12 @@ export async function healthCheck(): Promise<{ status: string; service: string }
 // Hazards  —  POST/GET/DELETE /hazards
 // ---------------------------------------------------------------------------
 
-/** GET /api/hazards — all hazards (optionally filtered by session) */
-export function getHazards(): Promise<Hazard[]> {
-  return request<Hazard[]>('/api/hazards');
+/** GET /hazards — all hazards (optionally filtered by session) */
+export async function getHazards(): Promise<Hazard[]> {
+  console.log('[API] getHazards() called');
+  const result = await request<Hazard[]>('/hazards');
+  console.log(`[API] getHazards() returned ${result.length} hazards`);
+  return result;
 }
 
 /** GET /api/hazards/<id> — fetch one hazard */

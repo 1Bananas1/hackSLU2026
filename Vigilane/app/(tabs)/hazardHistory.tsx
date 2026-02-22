@@ -130,15 +130,21 @@ export default function ReportHistory() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchHazards = useCallback(async () => {
+    console.log('[HazardHistory] fetchHazards started');
     setLoading(true);
     setError(null);
     try {
+      console.log('[HazardHistory] Calling getUserHazards()...');
       const data = await getUserHazards();
+      console.log('[HazardHistory] getUserHazards() completed, data:', data);
       setHazards(data);
-    } catch {
+      console.log('[HazardHistory] State updated with hazards');
+    } catch (err) {
+      console.error('[HazardHistory] Error fetching hazards:', err);
       setError('Failed to load hazards. Check your connection.');
     } finally {
       setLoading(false);
+      console.log('[HazardHistory] fetchHazards completed');
     }
   }, []);
 
