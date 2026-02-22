@@ -1,48 +1,64 @@
-import { DarkTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack, useRouter, useSegments } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
-import { useEffect } from 'react';
+import { Tabs } from 'expo-router';
+import { MaterialIcons } from '@expo/vector-icons';
 
-import { AuthProvider, useAuth } from '@/context/AuthContext';
-
-export const unstable_settings = {
-  anchor: '(tabs)',
+const colors = {
+  background: '#101822',
+  border:     '#1e293b',
+  active:     '#1973f0',
+  inactive:   '#64748b',
 };
 
-function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-  const segments = useSegments();
-
-  useEffect(() => {
-    if (loading) return;
-
-    const onLoginScreen = segments[0] === 'login';
-
-    if (!user && !onLoginScreen) {
-      router.replace('/login');
-    } else if (user && onLoginScreen) {
-      router.replace('/(tabs)/liveDashboard');
-    }
-  }, [user, loading, segments, router]);
-
-  return <>{children}</>;
-}
-
-export default function RootLayout() {
+export default function TabLayout() {
   return (
-    <AuthProvider>
-      <ThemeProvider value={DarkTheme}>
-        <AuthGuard>
-          <Stack>
-            <Stack.Screen name="login" options={{ headerShown: false }} />
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="hazardDetails" options={{ headerShown: false }} />
-          </Stack>
-        </AuthGuard>
-        <StatusBar style="light" />
-      </ThemeProvider>
-    </AuthProvider>
+    <Tabs
+      initialRouteName="liveDashboard"
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: { backgroundColor: colors.background, borderTopColor: colors.border },
+        tabBarActiveTintColor: colors.active,
+        tabBarInactiveTintColor: colors.inactive,
+      }}
+    >
+      <Tabs.Screen
+        name="liveDashboard"
+        options={{
+          title: 'Live',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="videocam" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="camera"
+        options={{
+          title: 'Camera',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="camera-alt" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="hazardHistory"
+        options={{
+          title: 'History',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="history" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: 'Settings',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="settings" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="index"
+        options={{ href: null }}
+      />
+    </Tabs>
   );
 }

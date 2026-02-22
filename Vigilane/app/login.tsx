@@ -15,6 +15,7 @@ import {
   GoogleAuthProvider,
   signInWithCredential,
   signInWithPopup,
+  signInWithEmailAndPassword,
 } from 'firebase/auth';
 import { auth } from '@/services/firebase';
 
@@ -96,6 +97,18 @@ export default function LoginScreen() {
     }
   }, [response]);
 
+  const handleDevBypass = async () => {
+    setAuthError(null);
+    setSigningIn(true);
+    try {
+      await signInWithEmailAndPassword(auth, 'dev@vigilane.dev', 'devpass123');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Dev sign-in failed.';
+      setAuthError(msg);
+      setSigningIn(false);
+    }
+  };
+
   const handleSignIn = async () => {
     setAuthError(null);
     setSigningIn(true);
@@ -168,6 +181,12 @@ export default function LoginScreen() {
         <Text style={styles.disclaimer}>
           By continuing you agree to our Terms of Service and Privacy Policy.
         </Text>
+
+        {__DEV__ && (
+          <TouchableOpacity style={styles.devButton} onPress={handleDevBypass} disabled={signingIn}>
+            <Text style={styles.devButtonText}>Dev bypass</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -311,5 +330,14 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textAlign: 'center',
     lineHeight: 16,
+  },
+  devButton: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  devButtonText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    textDecorationLine: 'underline',
   },
 });

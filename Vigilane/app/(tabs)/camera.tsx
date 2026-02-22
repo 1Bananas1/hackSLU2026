@@ -8,7 +8,10 @@ import {
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import { useIsFocused } from '@react-navigation/native';
+import Constants from 'expo-constants';
 import { useRoadDamageDetector } from '@/hooks/use-road-damage-detector';
+
+const IS_EMULATOR = !Constants.isDevice;
 
 export default function CameraScreen() {
   const isFocused = useIsFocused();
@@ -43,7 +46,7 @@ export default function CameraScreen() {
         style={StyleSheet.absoluteFill}
         device={device}
         isActive={isFocused}
-        frameProcessor={frameProcessor}
+        frameProcessor={IS_EMULATOR ? undefined : frameProcessor}
         pixelFormat="yuv"
       />
 

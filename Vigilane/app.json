@@ -26,15 +26,13 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.vigilane.app",
-      "permissions": [
-        "android.permission.CAMERA"
-      ],
+      "permissions": ["android.permission.CAMERA"],
       "intentFilters": [
         {
           "action": "VIEW",
           "data": [
             {
-              "scheme": "com.googleusercontent.apps.920730485139-ldj8kfc3p6q9gjd7l3b5jvlg327jkcgg"
+              "scheme": "com.googleusercontent.apps.920730485139-c97i8ck3ttkfpavlg8od3mesqghuhjnh"
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]

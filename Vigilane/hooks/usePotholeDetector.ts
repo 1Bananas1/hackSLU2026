@@ -38,6 +38,7 @@
 
 import { useMemo, useState } from 'react';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { useTensorflowModel } from 'react-native-fast-tflite';
 import { useFrameProcessor } from 'react-native-vision-camera';
 import { useSharedValue } from 'react-native-reanimated';
@@ -86,6 +87,10 @@ const SMOOTHED_THRESHOLD = 0.34;
 /** Minimum frames between consecutive alerts (≈ 1 second at 30 fps). */
 const COOLDOWN_FRAMES = 30;
 
+/** Run inference every Nth frame. On device: every 3rd (~10 fps of ML). On emulator: every frame
+ *  because the emulator camera already throttles itself to ~1 fps naturally. */
+const FRAME_SKIP = Constants.isDevice ? 3 : 1;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -120,7 +125,7 @@ export function usePotholeDetector() {
   // ── Model ───────────────────────────────────────────────────────────────
   // Use CoreML (Metal) on iOS for GPU-accelerated inference; CPU on Android
   // (GPU delegate crashes on emulators).  model.state is 'loading' | 'loaded' | 'error'.
-  const delegate = Platform.OS === 'ios' ? 'coreml' : 'default';
+  const delegate = Platform.OS === 'ios' ? 'core-ml' : 'default';
   const model = useTensorflowModel(
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('../assets/models/best.tflite'),
@@ -140,6 +145,7 @@ export function usePotholeDetector() {
   /** Frames elapsed since the last alert; starts at COOLDOWN_FRAMES so the
    *  first valid detection can fire immediately. */
   const cooldown = useSharedValue(COOLDOWN_FRAMES);
+  const frameCount = useSharedValue(0);
 
   /**
    * Shared detection result — written directly from the worklet, so animated
@@ -164,6 +170,10 @@ export function usePotholeDetector() {
 
       // Guard: model may still be loading on the first frames.
       if (model.state !== 'loaded' || model.model == null) return;
+
+      // Run inference every Nth frame (3 on device, 15 on emulator).
+      frameCount.value += 1;
+      if (frameCount.value % FRAME_SKIP !== 0) return;
 
       cooldown.value += 1;
 
@@ -261,7 +271,7 @@ export function usePotholeDetector() {
     // Shared values (buf0–buf2, bufIdx, cooldown, detection) are captured by
     // reference and do not need to appear in the dependency array — they are
     // stable JSI objects that mutate in place.
-    [model, resize, syncAlertToState],
+    [model, resize, syncAlertToState, frameCount],
   );
 
   return {
