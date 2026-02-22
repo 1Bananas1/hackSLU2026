@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,25 +8,14 @@ import {
   StatusBar,
   Switch,
   Alert,
+  ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Settings } from '../../types';
 import { useAuth } from '../../context/AuthContext';
-
-// Settings are local-only — there is no /settings endpoint in the current API.
-// TODO: persist to AsyncStorage or add a Firestore `settings` collection.
-
-const DEFAULT_SETTINGS: Settings = {
-  potholesEnabled: true,
-  debrisEnabled: true,
-  stalledVehiclesEnabled: true,
-  trafficAccidentsEnabled: false,
-  sensitivity: 0.65,
-  audioAlertsEnabled: true,
-  visualFlashesEnabled: false,
-  autoUploadEnabled: true,
-};
+import { DEFAULT_SETTINGS, getUserSettings, saveUserSettings } from '../../services/firestore';
 
 const colors = {
   background: '#101822',
@@ -43,16 +32,58 @@ const colors = {
 
 export default function SafetySettings() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const { user, signOut } = useAuth();
+
+  // Load settings from Firestore when the user is available.
+  useEffect(() => {
+    if (!user) return;
+    setSettingsLoaded(false);
+    getUserSettings(user.uid).then((s) => {
+      setSettings(s);
+      setSettingsLoaded(true);
+    });
+  }, [user]);
+
+  // Auto-save to Firestore whenever settings change (after initial load).
+  const isFirstSave = useRef(true);
+  useEffect(() => {
+    if (!settingsLoaded || !user) return;
+    // Skip the very first fire that occurs right after loading.
+    if (isFirstSave.current) { isFirstSave.current = false; return; }
+    saveUserSettings(user.uid, settings);
+  }, [settings, settingsLoaded, user]);
 
   const toggle = (key: keyof Settings, value: boolean) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
   };
 
+  const handleRestoreDefaults = () => {
+    setSettings(DEFAULT_SETTINGS);
+    if (user) saveUserSettings(user.uid, DEFAULT_SETTINGS);
+  };
+
+  const doSignOut = () => {
+    signOut().catch((err) => {
+      console.error('[Settings] signOut failed:', err);
+      if (Platform.OS !== 'web') {
+        Alert.alert('Error', 'Failed to sign out. Please try again.');
+      }
+    });
+  };
+
   const handleSignOut = () => {
+    if (Platform.OS === 'web') {
+      // Alert.alert on web delegates to window.confirm, whose callback
+      // reliability varies across browsers. Call window.confirm directly.
+      if (window.confirm('Are you sure you want to sign out?')) {
+        doSignOut();
+      }
+      return;
+    }
     Alert.alert('Sign out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign out', style: 'destructive', onPress: signOut },
+      { text: 'Sign out', style: 'destructive', onPress: doSignOut },
     ]);
   };
 
@@ -63,6 +94,7 @@ export default function SafetySettings() {
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Safety Settings</Text>
+        {!settingsLoaded && <ActivityIndicator size="small" color={colors.primary} style={styles.headerSpinner} />}
       </View>
 
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
@@ -136,28 +168,6 @@ export default function SafetySettings() {
               />
             </View>
 
-          </View>
-        </View>
-
-        {/* Sensitivity Slider (mockup — replace with @react-native-community/slider) */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>REPORTING SENSITIVITY</Text>
-          <View style={[styles.cardStandalone, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={styles.sliderHeader}>
-              <Text style={[styles.sliderLabel, { color: colors.textMuted }]}>LOW</Text>
-              <Text style={[styles.sliderLabelActive, { color: colors.primary }]}>
-                {settings.sensitivity >= 0.8 ? 'High' : settings.sensitivity >= 0.5 ? 'Medium-High' : 'Low'}
-              </Text>
-              <Text style={[styles.sliderLabel, { color: colors.textMuted }]}>HIGH</Text>
-            </View>
-            <View style={styles.sliderTrackContainer}>
-              <View style={[styles.sliderTrackBg, { backgroundColor: colors.switchTrackFalse }]} />
-              <View style={[styles.sliderTrackFill, { backgroundColor: colors.primary, width: `${settings.sensitivity * 100}%` }]} />
-              <View style={[styles.sliderThumb, { left: `${settings.sensitivity * 100}%` }]} />
-            </View>
-            <Text style={[styles.sliderDescription, { color: colors.textSecondary }]}>
-              Adjust how aggressively the AI flags potential hazards. Higher sensitivity may cause more false positives but ensures fewer missed incidents.
-            </Text>
           </View>
         </View>
 
@@ -267,7 +277,7 @@ export default function SafetySettings() {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <TouchableOpacity activeOpacity={0.7} onPress={() => setSettings(DEFAULT_SETTINGS)}>
+          <TouchableOpacity activeOpacity={0.7} onPress={handleRestoreDefaults}>
             <Text style={[styles.footerText, { color: colors.textSecondary }]}>
               Restore Default Settings
             </Text>
@@ -291,6 +301,7 @@ const styles = StyleSheet.create({
   },
   backButton: { width: 48, height: 48, justifyContent: 'center' },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '700' },
+  headerSpinner: { position: 'absolute', right: 16 },
   container: { flex: 1 },
   contentContainer: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 40 },
   section: { marginBottom: 24 },
@@ -321,32 +332,6 @@ const styles = StyleSheet.create({
   rowTextColumn: { flexDirection: 'column', justifyContent: 'center' },
   rowText: { fontSize: 16, fontWeight: '500' },
   rowSubtext: { fontSize: 12, marginTop: 2 },
-  cardStandalone: { borderRadius: 12, borderWidth: 1, padding: 20 },
-  sliderHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  sliderLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 0.5 },
-  sliderLabelActive: { fontSize: 14, fontWeight: '700' },
-  sliderTrackContainer: { height: 24, justifyContent: 'center', position: 'relative' },
-  sliderTrackBg: { position: 'absolute', left: 0, right: 0, height: 4, borderRadius: 2 },
-  sliderTrackFill: { position: 'absolute', left: 0, height: 4, borderRadius: 2 },
-  sliderThumb: {
-    position: 'absolute',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#ffffff',
-    transform: [{ translateX: -10 }],
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 4,
-  },
-  sliderDescription: { fontSize: 12, lineHeight: 18, marginTop: 16 },
   promoCard: { borderRadius: 12, borderWidth: 1, padding: 20, position: 'relative', overflow: 'hidden' },
   watermarkContainer: { position: 'absolute', top: -10, right: -10, zIndex: 0 },
   promoHeaderRow: {

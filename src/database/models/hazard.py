@@ -18,9 +18,9 @@ class Hazard:
     event_type: str = ""
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     photo_url: Optional[str] = None
-    location: Optional[Dict[str, float]] = None
-    status: str = "pending"
-    id: Optional[str] = None
+    location: Optional[Dict[str, float]] = None  # {"lat": ..., "lng": ...}
+    status: str = "pending"  # "pending" | "reported" | "dismissed"
+    id: Optional[str] = None  # populated after Firestore write
 
     def __post_init__(self) -> None:
         if not self.event_type and self.labels:

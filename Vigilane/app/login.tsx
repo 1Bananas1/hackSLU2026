@@ -10,13 +10,16 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import { Redirect } from 'expo-router';
 import * as Google from 'expo-auth-session/providers/google';
 import {
   GoogleAuthProvider,
   signInWithCredential,
   signInWithPopup,
+  signInWithEmailAndPassword,
 } from 'firebase/auth';
 import { auth } from '@/services/firebase';
+import { useAuth } from '@/context/AuthContext';
 
 // ---------------------------------------------------------------------------
 // Design tokens (matches the rest of the app)
@@ -39,6 +42,7 @@ const colors = {
 // ---------------------------------------------------------------------------
 
 export default function LoginScreen() {
+  const { user, loading } = useAuth();
   const [authError, setAuthError] = useState<string | null>(null);
   const [signingIn, setSigningIn] = useState(false);
 
@@ -96,6 +100,18 @@ export default function LoginScreen() {
     }
   }, [response]);
 
+  const handleDevBypass = async () => {
+    setAuthError(null);
+    setSigningIn(true);
+    try {
+      await signInWithEmailAndPassword(auth, 'dev@vigilane.dev', 'devpass123');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Dev sign-in failed.';
+      setAuthError(msg);
+      setSigningIn(false);
+    }
+  };
+
   const handleSignIn = async () => {
     setAuthError(null);
     setSigningIn(true);
@@ -113,6 +129,9 @@ export default function LoginScreen() {
       setSigningIn(false);
     }
   };
+
+  // Already signed in — skip login.
+  if (!loading && user) return <Redirect href="/(tabs)/liveDashboard" />;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -168,6 +187,12 @@ export default function LoginScreen() {
         <Text style={styles.disclaimer}>
           By continuing you agree to our Terms of Service and Privacy Policy.
         </Text>
+
+        {__DEV__ && (
+          <TouchableOpacity style={styles.devButton} onPress={handleDevBypass} disabled={signingIn}>
+            <Text style={styles.devButtonText}>Dev bypass</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -311,5 +336,14 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textAlign: 'center',
     lineHeight: 16,
+  },
+  devButton: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  devButtonText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    textDecorationLine: 'underline',
   },
 });

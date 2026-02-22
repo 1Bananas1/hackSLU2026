@@ -95,8 +95,7 @@ def create_hazard():
             "event_type", ""
         ),  # derived from labels[0] in __post_init__
         photo_url=data.get("photo_url"),
-        location=location,
-        status="pending",  # always forced; ignore client-provided status
+        location=data.get("location"),
     )
 
     hazard_id = save_hazard(hazard)

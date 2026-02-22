@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, signOut as firebaseSignOut, User } from 'firebase/auth';
-import { auth } from '../services/firebase';
-import { upsertUser } from '../services/user';
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { auth, db } from '../services/firebase';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,11 +39,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(firebaseUser);
       setLoading(false);
 
-      // Upsert the user profile into Firestore on every sign-in.
-      // Creates users/{uid} on first login; keeps email/display_name/last_seen
-      // current on subsequent logins.
       if (firebaseUser) {
-        void upsertUser(firebaseUser);
+        // Upsert the user document so the `users` collection always reflects
+        // the latest profile. merge: true means other fields (e.g. settings)
+        // are never overwritten.
+        console.log('[AuthContext] upserting user doc for', firebaseUser.uid);
+        setDoc(
+          doc(db, 'users', firebaseUser.uid),
+          {
+            uid:          firebaseUser.uid,
+            email:        firebaseUser.email,
+            display_name: firebaseUser.displayName,
+            photo_url:    firebaseUser.photoURL,
+            last_seen:    serverTimestamp(),
+          },
+          { merge: true },
+        ).then(() => {
+          console.log('[AuthContext] user doc upserted OK');
+        }).catch((err) => {
+          // Always log — if this says "permission-denied" you need to update
+          // your Firestore security rules to allow writes on users/{uid}.
+          console.error('[AuthContext] user doc upsert FAILED:', err);
+        });
       }
     });
     return unsubscribe;

@@ -47,19 +47,18 @@ export interface CreateHazardPayload {
 }
 
 // ---------------------------------------------------------------------------
-// Local-only types (no backend endpoint yet)
+// User settings
 // ---------------------------------------------------------------------------
 
 /**
- * Settings are persisted locally only — there is no /settings endpoint.
- * Future: add a Firestore `settings` collection and wire up via api.ts.
+ * Persisted in Firestore under users/{uid}.settings.
+ * Read/write via getUserSettings / saveUserSettings in services/firestore.ts.
  */
 export interface Settings {
   potholesEnabled: boolean;
   debrisEnabled: boolean;
   stalledVehiclesEnabled: boolean;
   trafficAccidentsEnabled: boolean;
-  sensitivity: number;
   audioAlertsEnabled: boolean;
   visualFlashesEnabled: boolean;
   autoUploadEnabled: boolean;

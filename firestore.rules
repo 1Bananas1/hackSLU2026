@@ -1,0 +1,27 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Users ───────────────────────────────────────────────────────────────
+    // Each authenticated user can read and write only their own document.
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ── Hazards ─────────────────────────────────────────────────────────────
+    // Any authenticated user can create or read hazards.
+    // Only the backend (Admin SDK) should update/delete them, but allowing
+    // authenticated writes here lets the mobile client also write hazards
+    // directly when the backend is unreachable.
+    match /hazards/{hazardId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // ── Sessions ────────────────────────────────────────────────────────────
+    match /sessions/{sessionId} {
+      allow read, write: if request.auth != null;
+    }
+
+  }
+}

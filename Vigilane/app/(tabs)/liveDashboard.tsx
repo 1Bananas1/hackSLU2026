@@ -15,8 +15,9 @@ import * as SecureStore from 'expo-secure-store';
 import { useIsFocused } from '@react-navigation/native';
 import { usePotholeDetector } from '@/hooks/usePotholeDetector';
 import { writeHazard } from '@/services/firestore';
-import { createHazard } from '@/services/api';
-import type { Hazard } from '@/types';
+import { createSession, endSession, createHazard, getSessionHazards } from '@/services/api';
+import { useAuth } from '@/context/AuthContext';
+import type { Hazard, Session } from '@/types';
 import { Toast, useToast } from '@/components/toast';
 
 function formatElapsed(seconds: number): string {
@@ -31,6 +32,7 @@ function mphFromMetersPerSecond(mps: number): number {
 }
 
 export default function VigilaneLiveDashboard() {
+  const { user } = useAuth();
   const isFocused = useIsFocused();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const bounceAnim = useRef(new Animated.Value(0)).current;
@@ -149,6 +151,7 @@ export default function VigilaneLiveDashboard() {
       bboxes: lastAlert.bboxes,
       labels: lastAlert.labels,
       frameNumber: 0,
+      user_uid: user?.uid,
     });
 
     const clearTimer = setTimeout(() => setLatestHazard(null), 30_000);
