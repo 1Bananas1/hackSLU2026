@@ -40,29 +40,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
 
       if (firebaseUser) {
-        // Upsert the user document so the `users` collection always reflects
-        // the latest profile. merge: true means other fields (e.g. settings)
-        // are never overwritten.
-        console.log('[AuthContext] upserting user doc for', firebaseUser.uid);
+        // Keep a lightweight user profile document for later queries.
         setDoc(
           doc(db, 'users', firebaseUser.uid),
           {
-            uid:          firebaseUser.uid,
-            email:        firebaseUser.email,
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
             display_name: firebaseUser.displayName,
-            photo_url:    firebaseUser.photoURL,
-            last_seen:    serverTimestamp(),
+            photo_url: firebaseUser.photoURL,
+            last_seen: serverTimestamp(),
           },
           { merge: true },
-        ).then(() => {
-          console.log('[AuthContext] user doc upserted OK');
-        }).catch((err) => {
-          // Always log — if this says "permission-denied" you need to update
-          // your Firestore security rules to allow writes on users/{uid}.
-          console.error('[AuthContext] user doc upsert FAILED:', err);
+        ).catch((err) => {
+          console.error('[AuthContext] user doc upsert failed:', err);
         });
       }
     });
+
     return unsubscribe;
   }, []);
 

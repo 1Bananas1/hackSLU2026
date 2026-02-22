@@ -72,13 +72,18 @@ export function useRoadDamageDetector() {
       'worklet';
       if (model.state !== 'loaded' || model.model == null) return;
 
-      // Resize the camera frame to 640×640 float32 RGB — YOLO input format.
-      const resized = resize(frame, {
-        scale: { width: 640, height: 640 },
-        pixelFormat: 'rgb',
-        dataType: 'float32',
-        rotation: '0deg',
-      });
+      let resized: Float32Array;
+      try {
+        // Resize the camera frame to 640×640 float32 RGB — YOLO input format.
+        resized = resize(frame, {
+          scale: { width: 640, height: 640 },
+          pixelFormat: 'rgb',
+          dataType: 'float32',
+          rotation: '0deg',
+        });
+      } catch {
+        return;
+      }
 
       // Run synchronous TFLite inference.
       // Output shape: [1, num_detections, 6] stored as a flat Float32Array.

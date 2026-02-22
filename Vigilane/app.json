@@ -51,13 +51,14 @@
     "plugins": [
       "expo-router",
       "expo-dev-client",
-      [
-        "react-native-vision-camera",
-        {
-          "cameraPermissionText": "Vigilane uses the camera to detect road damage in real time.",
-          "enableMicrophonePermission": false
-        }
-      ],
+      // Temporarily disabled - requires development build
+      // [
+      //   "react-native-vision-camera",
+      //   {
+      //     "cameraPermissionText": "Vigilane uses the camera to detect road damage in real time.",
+      //     "enableMicrophonePermission": false
+      //   }
+      // ],
       [
         "react-native-fast-tflite",
         {

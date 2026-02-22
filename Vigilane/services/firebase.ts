@@ -7,16 +7,16 @@
  * - On web we use indexedDBLocalPersistence so refresh keeps the session.
  */
 
-import { Platform } from "react-native";
-import { getApp, getApps, initializeApp } from "firebase/app";
+import { Platform } from 'react-native';
+import { getApp, getApps, initializeApp } from 'firebase/app';
 import {
   getAuth,
   initializeAuth,
   indexedDBLocalPersistence,
   browserPopupRedirectResolver,
   type Auth,
-} from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+} from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
