@@ -15,7 +15,8 @@
  */
 
 import { getApp, getApps, initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -28,8 +29,13 @@ const firebaseConfig = {
 };
 
 // Re-use the existing app if already initialised (e.g. Fast Refresh).
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+const isFirstInit = getApps().length === 0;
+const app = isFirstInit ? initializeApp(firebaseConfig) : getApp();
 
-export const auth = getAuth(app);
+// initializeAuth (with AsyncStorage persistence) must only be called once.
+// On Fast Refresh the app already exists, so fall back to getAuth.
+export const auth = isFirstInit
+  ? initializeAuth(app, { persistence: getReactNativePersistence(ReactNativeAsyncStorage) })
+  : getAuth(app);
 export const db = getFirestore(app);
 export default app;
