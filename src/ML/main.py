@@ -34,9 +34,9 @@ from ultralytics import YOLO
 # ---------------------------------------------------------------------------
 # Constants — override via CLI flags
 # ---------------------------------------------------------------------------
-MODEL_PATH = "src/ML/best.pt"
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "best.pt")
 
-CONFIDENCE_THRESHOLD = 0.12  # min per-detection YOLO confidence to count
+CONFIDENCE_THRESHOLD = 0.15  # min per-detection YOLO confidence to count
 HAZARD_CLASSES = {  # all pavement distress types worth alerting on
     "pothole",
     "alligator cracking",

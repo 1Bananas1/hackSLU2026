@@ -59,6 +59,18 @@ def get_hazards_by_user(user_uid: str) -> List[Hazard]:
     return hazards
 
 
+def get_hazards_by_session(session_id: str) -> List[Hazard]:
+    """Return all hazards for a session, newest first."""
+    docs = (
+        db.collection(COLLECTION)
+        .where("session_id", "==", session_id)
+        .stream()
+    )
+    hazards = [Hazard.from_dict(doc.to_dict(), doc.id) for doc in docs]
+    hazards.sort(key=lambda h: h.timestamp or datetime.min, reverse=True)
+    return hazards
+
+
 def delete_hazard(hazard_id: str) -> None:
     """Permanently delete a hazard document."""
     db.collection(COLLECTION).document(hazard_id).delete()

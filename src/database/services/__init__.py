@@ -2,6 +2,7 @@ from .hazard_service import (
     save_hazard,
     get_hazard,
     get_hazards_by_user,
+    get_hazards_by_session,
     delete_hazard,
     update_hazard_status,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "save_hazard",
     "get_hazard",
     "get_hazards_by_user",
+    "get_hazards_by_session",
     "delete_hazard",
     "update_hazard_status",
     # report
