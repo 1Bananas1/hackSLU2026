@@ -33,11 +33,26 @@ const WEB_STUBS = {
   'react-native-worklets-core': path.resolve(__dirname, 'web-stubs/react-native-worklets-core.js'),
 };
 
+// react-native-fast-tflite v1.6.1 has a bug in its commonjs build:
+// lib/commonjs/TensorflowModule.js uses '../spec/NativeRNTflite' which resolves
+// to lib/spec/ (doesn't exist) instead of the package root spec/ directory.
+const tfliteRoot = path.dirname(require.resolve('react-native-fast-tflite/package.json'));
+
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // Fix tflite commonjs spec path bug.
+  if (
+    moduleName === '../spec/NativeRNTflite' &&
+    context.originModulePath.includes('react-native-fast-tflite')
+  ) {
+    return {
+      filePath: path.join(tfliteRoot, 'spec', 'NativeRNTflite.ts'),
+      type: 'sourceFile',
+    };
+  }
+  // Redirect native-only packages to web stubs for web builds.
   if (platform === 'web' && Object.prototype.hasOwnProperty.call(WEB_STUBS, moduleName)) {
     return { filePath: WEB_STUBS[moduleName], type: 'sourceFile' };
   }
-  // Fall back to Metro's default resolver for everything else.
   return context.resolveRequest(context, moduleName, platform);
 };
 
