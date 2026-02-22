@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import { Redirect } from 'expo-router';
 import * as Google from 'expo-auth-session/providers/google';
 import {
   GoogleAuthProvider,
@@ -18,6 +19,7 @@ import {
   signInWithEmailAndPassword,
 } from 'firebase/auth';
 import { auth } from '@/services/firebase';
+import { useAuth } from '@/context/AuthContext';
 
 // ---------------------------------------------------------------------------
 // Design tokens (matches the rest of the app)
@@ -40,6 +42,7 @@ const colors = {
 // ---------------------------------------------------------------------------
 
 export default function LoginScreen() {
+  const { user, loading } = useAuth();
   const [authError, setAuthError] = useState<string | null>(null);
   const [signingIn, setSigningIn] = useState(false);
 
@@ -126,6 +129,9 @@ export default function LoginScreen() {
       setSigningIn(false);
     }
   };
+
+  // Already signed in — skip login.
+  if (!loading && user) return <Redirect href="/(tabs)/liveDashboard" />;
 
   return (
     <SafeAreaView style={styles.safe}>

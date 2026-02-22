@@ -1,23 +1,22 @@
 /**
- * Firebase Web SDK initialisation.
+ * Firebase Web SDK initialisation for Expo (native + web).
  *
- * Required environment variables (copy .env.example → .env):
- *   EXPO_PUBLIC_FIREBASE_API_KEY
- *   EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN
- *   EXPO_PUBLIC_FIREBASE_PROJECT_ID
- *   EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET
- *   EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
- *   EXPO_PUBLIC_FIREBASE_APP_ID
- *
- * Import `auth` or `db` from this module rather than calling initializeApp
- * yourself — Firebase guards against double-initialisation, but keeping a
- * single entry point makes it easier to swap implementations later.
+ * Note:
+ * - firebase@11.x does NOT provide `firebase/auth/react-native`.
+ * - On native we initialize auth without custom persistence (works in Expo dev client).
+ * - On web we use indexedDBLocalPersistence so refresh keeps the session.
  */
 
-import { getApp, getApps, initializeApp } from 'firebase/app';
-import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
-import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
-import { getFirestore } from 'firebase/firestore';
+import { Platform } from "react-native";
+import { getApp, getApps, initializeApp } from "firebase/app";
+import {
+  getAuth,
+  initializeAuth,
+  indexedDBLocalPersistence,
+  browserPopupRedirectResolver,
+  type Auth,
+} from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -28,14 +27,33 @@ const firebaseConfig = {
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Re-use the existing app if already initialised (e.g. Fast Refresh).
 const isFirstInit = getApps().length === 0;
 const app = isFirstInit ? initializeApp(firebaseConfig) : getApp();
 
-// initializeAuth (with AsyncStorage persistence) must only be called once.
-// On Fast Refresh the app already exists, so fall back to getAuth.
-export const auth = isFirstInit
-  ? initializeAuth(app, { persistence: getReactNativePersistence(ReactNativeAsyncStorage) })
-  : getAuth(app);
+/**
+ * initializeAuth must only be called once per app instance.
+ * On fast refresh, fall back to getAuth(app).
+ *
+ * We guard browser-specific options with `typeof window !== 'undefined'`
+ * because Expo Router's SSR renderer runs on Node.js where browser classes
+ * (browserPopupRedirectResolver, indexedDBLocalPersistence) don't exist.
+ */
+function initAuth(): Auth {
+  if (!isFirstInit) return getAuth(app);
+
+  const isBrowser = typeof window !== 'undefined';
+
+  if (isBrowser && Platform.OS === 'web') {
+    return initializeAuth(app, {
+      persistence: indexedDBLocalPersistence,
+      popupRedirectResolver: browserPopupRedirectResolver,
+    });
+  }
+
+  // iOS/Android, or server-side rendering on Node.js
+  return initializeAuth(app);
+}
+
+export const auth = initAuth();
 export const db = getFirestore(app);
 export default app;

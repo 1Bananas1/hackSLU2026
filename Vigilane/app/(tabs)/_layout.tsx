@@ -1,5 +1,6 @@
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAuth } from '@/context/AuthContext';
 
 const colors = {
   background: '#101822',
@@ -9,6 +10,16 @@ const colors = {
 };
 
 export default function TabLayout() {
+  const { user, loading } = useAuth();
+
+  // Wait for Firebase to resolve the auth state before rendering anything.
+  if (loading) return null;
+
+  // Not authenticated — redirect to login.
+  // This is the canonical sign-out redirect: when user becomes null after
+  // calling signOut(), this layout re-renders and navigates to /login.
+  if (!user) return <Redirect href="/login" />;
+
   return (
     <Tabs
       initialRouteName="liveDashboard"

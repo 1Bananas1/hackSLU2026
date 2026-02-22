@@ -98,6 +98,7 @@ def create_hazard():
         photo_url=data.get("photo_url"),
         location=data.get("location"),
         status=status,
+        user_uid=g.user.get("uid"),
     )
 
     hazard_id = save_hazard(hazard)
@@ -236,4 +237,5 @@ def _hazard_to_json(hazard) -> dict:
         "photo_url": hazard.photo_url,
         "location": hazard.location,
         "status": hazard.status,
+        "user_uid": hazard.user_uid,
     }
