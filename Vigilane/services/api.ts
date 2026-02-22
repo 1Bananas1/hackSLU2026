@@ -1,7 +1,7 @@
-import { Hazard, CreateHazardPayload } from '../types';
+import { Hazard, Session, CreateHazardPayload, CreateSessionPayload } from '../types';
 
 // Re-export types so callers can import them from this module
-export type { Hazard, CreateHazardPayload };
+export type { Hazard, Session, CreateHazardPayload, CreateSessionPayload };
 import { Platform } from 'react-native';
 import { auth } from './firebase';
 
@@ -56,12 +56,12 @@ export async function healthCheck(): Promise<{ status: string; service: string }
 // Hazards  —  POST/GET/DELETE /hazards
 // ---------------------------------------------------------------------------
 
-/** GET /hazards — the authenticated user's hazards, newest first */
+/** GET /api/hazards — all hazards (optionally filtered by session) */
 export function getHazards(): Promise<Hazard[]> {
-  return request<Hazard[]>('/hazards');
+  return request<Hazard[]>('/api/hazards');
 }
 
-/** GET /hazards/<id> — fetch one hazard */
+/** GET /api/hazards/<id> — fetch one hazard */
 export function getHazard(id: string): Promise<Hazard> {
   return request<Hazard>(`/hazards/${id}`);
 }
@@ -82,4 +82,29 @@ export function deleteHazard(id: string): Promise<{ message: string; hazard_id: 
   return request<{ message: string; hazard_id: string }>(`/hazards/${id}`, {
     method: 'DELETE',
   });
+}
+
+// ---------------------------------------------------------------------------
+// Sessions — POST /api/sessions, PATCH /api/sessions/<id>/end
+// ---------------------------------------------------------------------------
+
+/** POST /api/sessions — start a new recording session */
+export function createSession(device_id: string): Promise<Session> {
+  const payload: CreateSessionPayload = { device_id };
+  return request<Session>('/api/sessions', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+/** PATCH /api/sessions/<id>/end — end an active session */
+export function endSession(id: string): Promise<Session> {
+  return request<Session>(`/api/sessions/${id}/end`, {
+    method: 'PATCH',
+  });
+}
+
+/** GET /api/sessions/<id>/hazards — hazards for a session */
+export function getSessionHazards(id: string): Promise<Hazard[]> {
+  return request<Hazard[]>(`/api/sessions/${id}/hazards`);
 }

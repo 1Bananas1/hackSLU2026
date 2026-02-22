@@ -80,6 +80,10 @@ export interface WriteHazardInput {
  * Never throws — failures are swallowed so detection never blocks on I/O.
  */
 export async function writeHazard(sessionId: string, input: WriteHazardInput): Promise<void> {
+  if (!sessionId) {
+    console.warn('[firestore] writeHazard skipped: missing sessionId');
+    return;
+  }
   const { confidence, bboxes, labels, frameNumber = 0, user_uid } = input;
 
   try {
@@ -93,7 +97,6 @@ export async function writeHazard(sessionId: string, input: WriteHazardInput): P
       timestamp: serverTimestamp(),
       status: 'pending',
       photo_url: null,
-      location,
     });
 
     console.log('[firestore] hazard written', ref.id);

@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -18,6 +19,7 @@ export default function CameraScreen() {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
   const { frameProcessor, detections, modelState } = useRoadDamageDetector();
+  const pixelFormat = Platform.OS === 'ios' ? 'rgb' : 'yuv';
 
   if (!hasPermission) {
     return (
@@ -47,7 +49,7 @@ export default function CameraScreen() {
         device={device}
         isActive={isFocused}
         frameProcessor={IS_EMULATOR ? undefined : frameProcessor}
-        pixelFormat="yuv"
+        pixelFormat={pixelFormat}
       />
 
       {/* Show a spinner while the TFLite model loads */}

@@ -31,6 +31,19 @@ export interface Hazard {
 }
 
 // ---------------------------------------------------------------------------
+// Session types
+// ---------------------------------------------------------------------------
+
+export interface Session {
+  id: string;
+  device_id: string;
+  start_time: string;
+  end_time: string | null;
+  hazard_count: number;
+  status: 'active' | 'completed';
+}
+
+// ---------------------------------------------------------------------------
 // Request payloads
 // ---------------------------------------------------------------------------
 
@@ -38,12 +51,18 @@ export interface Hazard {
 export interface CreateHazardPayload {
   // user_uid is set server-side from the auth token — never send from client
   // status is always forced to "pending" on creation by the server
+  session_id: string;
   confidence: number;
   labels: string[];
   bboxes: BoundingBox[];
   frame_number?: number;
   photo_url?: string | null;
   location?: HazardLocation | null;
+}
+
+/** POST /sessions */
+export interface CreateSessionPayload {
+  device_id: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   StatusBar,
+  Platform,
   Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,9 +16,9 @@ import * as SecureStore from 'expo-secure-store';
 import { useIsFocused } from '@react-navigation/native';
 import { usePotholeDetector } from '@/hooks/usePotholeDetector';
 import { writeHazard } from '@/services/firestore';
-import { createSession, endSession, createHazard, getSessionHazards } from '@/services/api';
+import { createSession, endSession, createHazard } from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
-import type { Hazard, Session } from '@/types';
+import type { Hazard } from '@/types';
 import { Toast, useToast } from '@/components/toast';
 
 function formatElapsed(seconds: number): string {
@@ -41,6 +42,7 @@ export default function VigilaneLiveDashboard() {
   const [latestHazard, setLatestHazard] = useState<Hazard | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [reporting, setReporting] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const { toast, showToast } = useToast();
 
   // ── Camera ────────────────────────────────────────────────────────────────
@@ -116,21 +118,48 @@ export default function VigilaneLiveDashboard() {
     return () => clearInterval(timer);
   }, [isRecording]);
 
-  const handleToggleSession = () => {
+  const getDeviceId = async (): Promise<string> => {
+    const existing = await SecureStore.getItemAsync('device_id');
+    if (existing) return existing;
+    const created = `mobile_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    await SecureStore.setItemAsync('device_id', created);
+    return created;
+  };
+
+  const handleToggleSession = async () => {
     if (isRecording) {
-      setIsRecording(false);
-      setLatestHazard(null);
-      setElapsedSeconds(0);
-      showToast('Recording stopped', 'info');
-    } else {
+      try {
+        if (sessionId) {
+          await endSession(sessionId);
+        }
+      } catch (err) {
+        console.error('End session failed:', err);
+        showToast('Failed to end session', 'error');
+      } finally {
+        setIsRecording(false);
+        setSessionId(null);
+        setLatestHazard(null);
+        setElapsedSeconds(0);
+        showToast('Recording stopped', 'info');
+      }
+      return;
+    }
+
+    try {
+      const deviceId = await getDeviceId();
+      const session = await createSession(deviceId);
+      setSessionId(session.id);
       setIsRecording(true);
       showToast('Recording started', 'success');
+    } catch (err) {
+      console.error('Start session failed:', err);
+      showToast('Failed to start session', 'error');
     }
   };
 
   // ── On-device detection handler ───────────────────────────────────────────
   useEffect(() => {
-    if (!lastAlert || !isRecording) return;
+    if (!lastAlert || !isRecording || !sessionId) return;
 
     const localHazard: Hazard = {
       id: `local-${lastAlert.timestamp}`,
@@ -146,7 +175,7 @@ export default function VigilaneLiveDashboard() {
 
     setLatestHazard(localHazard);
 
-    void writeHazard({
+    void writeHazard(sessionId, {
       confidence: lastAlert.confidence,
       bboxes: lastAlert.bboxes,
       labels: lastAlert.labels,
@@ -156,14 +185,19 @@ export default function VigilaneLiveDashboard() {
 
     const clearTimer = setTimeout(() => setLatestHazard(null), 30_000);
     return () => clearTimeout(clearTimer);
-  }, [lastAlert, isRecording]);
+  }, [lastAlert, isRecording, sessionId]);
 
   // ── Manual report button ──────────────────────────────────────────────────
   const handleReportHazard = async () => {
     if (reporting) return;
+    if (!sessionId) {
+      showToast('Start recording to create a session first', 'error');
+      return;
+    }
     setReporting(true);
     try {
       const newHazard = await createHazard({
+        session_id: sessionId,
         confidence: 1.0,
         labels: ['manual'],
         bboxes: [],
@@ -203,7 +237,7 @@ export default function VigilaneLiveDashboard() {
           device={device}
           isActive={isFocused}
           frameProcessor={frameProcessor}
-          pixelFormat="yuv"
+          pixelFormat={Platform.OS === 'ios' ? 'rgb' : 'yuv'}
         />
       ) : (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0a1628' }]} />

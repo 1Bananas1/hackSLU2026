@@ -50,10 +50,13 @@ export default function LoginScreen() {
   // On Android the native PKCE flow requires a custom dev build (npx expo
   // run:android) whose debug keystore SHA-1 is registered in Google Cloud
   // Console. This will NOT work inside Expo Go (exp:// redirect is rejected).
+  const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+  const hasValidClientIds = iosClientId && iosClientId !== 'placeholder';
+  
   const [, response, promptAsync] = Google.useAuthRequest({
     webClientId:     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '',
     androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ?? '',
-    iosClientId:     process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+    iosClientId:     hasValidClientIds ? iosClientId : undefined,
     scopes: ['openid', 'profile', 'email'],
   });
 
@@ -114,6 +117,13 @@ export default function LoginScreen() {
 
   const handleSignIn = async () => {
     setAuthError(null);
+    
+    // Check if we have valid client IDs for the current platform
+    if (Platform.OS === 'ios' && !hasValidClientIds) {
+      setAuthError('iOS OAuth not configured. Please configure EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID.');
+      return;
+    }
+    
     setSigningIn(true);
     try {
       if (Platform.OS === 'web') {
@@ -169,9 +179,9 @@ export default function LoginScreen() {
         )}
 
         <TouchableOpacity
-          style={[styles.googleButton, signingIn && styles.googleButtonDisabled]}
+          style={[styles.googleButton, (signingIn || !hasValidClientIds) && styles.googleButtonDisabled]}
           onPress={handleSignIn}
-          disabled={signingIn}
+          disabled={signingIn || !hasValidClientIds}
           activeOpacity={0.8}
         >
           {signingIn ? (
@@ -180,7 +190,7 @@ export default function LoginScreen() {
             <MaterialIcons name="g-mobiledata" size={22} color={colors.primary} />
           )}
           <Text style={styles.googleButtonText}>
-            {signingIn ? 'Signing in…' : 'Continue with Google'}
+            {signingIn ? 'Signing in…' : !hasValidClientIds ? 'Google Sign-In Not Configured' : 'Continue with Google'}
           </Text>
         </TouchableOpacity>
 

@@ -177,15 +177,20 @@ export function usePotholeDetector() {
 
       cooldown.value += 1;
 
-      // Resize the camera frame to the model's expected 640×640 float32 RGB
-      // input before calling runSync.  The vision-camera-resize-plugin
-      // performs this conversion inside the worklet (no JS round-trip).
-      const resized = resize(frame, {
-        scale: { width: 640, height: 640 },
-        pixelFormat: 'rgb',
-        dataType: 'float32',
-        rotation: '0deg',
-      });
+      let resized: Float32Array;
+      try {
+        // Resize the camera frame to the model's expected 640×640 float32 RGB
+        // input before calling runSync.  The vision-camera-resize-plugin
+        // performs this conversion inside the worklet (no JS round-trip).
+        resized = resize(frame, {
+          scale: { width: 640, height: 640 },
+          pixelFormat: 'rgb',
+          dataType: 'float32',
+          rotation: '0deg',
+        });
+      } catch {
+        return;
+      }
 
       // Run synchronous TFLite inference — equivalent to model.runSync([frame])
       // once the frame has been pre-processed to the correct tensor format.
