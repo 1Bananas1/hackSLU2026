@@ -6,7 +6,7 @@ import { Platform } from 'react-native';
 import { auth } from './firebase';
 
 const defaultBaseUrl =
-  Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://127.0.0.1:5000';
+  Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://192.168.1.93:5000';
 export const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? defaultBaseUrl;
 
 // ---------------------------------------------------------------------------
@@ -63,7 +63,7 @@ export function getHazards(): Promise<Hazard[]> {
 
 /** GET /hazards/<id> — fetch one hazard */
 export function getHazard(id: string): Promise<Hazard> {
-  return request<Hazard>(`/hazards/${id}`);
+  return request<Hazard>(`/api/hazards/${id}`);
 }
 
 /**
@@ -71,7 +71,7 @@ export function getHazard(id: string): Promise<Hazard> {
  * user_uid is set server-side from the auth token; do not include it in payload.
  */
 export function createHazard(payload: CreateHazardPayload): Promise<Hazard> {
-  return request<Hazard>('/hazards', {
+  return request<Hazard>('/api/hazards', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -79,7 +79,7 @@ export function createHazard(payload: CreateHazardPayload): Promise<Hazard> {
 
 /** DELETE /hazards/<id> — permanently delete a hazard (owner only) */
 export function deleteHazard(id: string): Promise<{ message: string; hazard_id: string }> {
-  return request<{ message: string; hazard_id: string }>(`/hazards/${id}`, {
+  return request<{ message: string; hazard_id: string }>(`/api/hazards/${id}`, {
     method: 'DELETE',
   });
 }

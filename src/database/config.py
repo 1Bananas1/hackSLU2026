@@ -37,8 +37,12 @@ def initialize_firebase() -> None:
             "firebase_admin is not installed. Install firebase-admin to use Firebase."
         ) from exc
 
-    if firebase_admin._apps:
-        return
+    # Check if already initialized using the proper method
+    try:
+        firebase_admin.get_app()
+        return  # Already initialized
+    except ValueError:
+        pass  # Not initialized, proceed
 
     key_path = os.getenv("FIREBASE_KEY_PATH")
     resolved_key_path = (
