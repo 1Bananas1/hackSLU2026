@@ -19,9 +19,8 @@ Typical usage from the Flask backend:
     hazard_id = save_hazard(hazard)
 """
 
+from datetime import datetime
 from typing import List, Optional
-
-from google.cloud.firestore import Query
 
 from ..client import db
 from ..models.hazard import Hazard
@@ -49,18 +48,15 @@ def get_hazard(hazard_id: str) -> Optional[Hazard]:
 
 
 def get_hazards_by_user(user_uid: str) -> List[Hazard]:
-    """
-    Return all hazards owned by a user, newest first.
-    Requires a composite index on (user_uid ASC, timestamp DESC) — Firestore
-    will print a direct link to create it on the first query if it is missing.
-    """
+    """Return all hazards owned by a user, newest first."""
     docs = (
         db.collection(COLLECTION)
         .where("user_uid", "==", user_uid)
-        .order_by("timestamp", direction=Query.DESCENDING)
         .stream()
     )
-    return [Hazard.from_dict(doc.to_dict(), doc.id) for doc in docs]
+    hazards = [Hazard.from_dict(doc.to_dict(), doc.id) for doc in docs]
+    hazards.sort(key=lambda h: h.timestamp or datetime.min, reverse=True)
+    return hazards
 
 
 def delete_hazard(hazard_id: str) -> None:

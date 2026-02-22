@@ -4,7 +4,7 @@ Flask application factory for the HackSLU2026 backend API.
 
 import os
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, Response
 
 try:
     from flask_cors import CORS  # type: ignore
@@ -33,5 +33,13 @@ def create_app() -> Flask:
     @app.get("/")
     def health():
         return jsonify({"status": "ok", "service": "HackSLU2026 API"})
+
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        response = jsonify({"error": str(e)})
+        response.status_code = 500
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        return response
 
     return app
