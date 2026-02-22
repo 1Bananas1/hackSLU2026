@@ -30,15 +30,15 @@ def require_auth(f: F) -> F:
     """
     Decorator that enforces Firebase ID token authentication.
 
-    On success: sets g.user to the decoded token dict (keys: uid, email, …).
-    On failure: returns 401 JSON with an error message.
+    On success: sets g.user to decoded token dict (uid, email, ...).
+    On failure: returns 401 JSON with an actionable error message.
 
     In Flask TESTING mode: bypasses verification and sets a fake user.
     """
 
     @wraps(f)
     def decorated(*args, **kwargs):
-        # ✅ Unit tests: bypass Firebase auth entirely
+        # Unit tests: bypass Firebase auth entirely
         if current_app and current_app.config.get("TESTING"):
             g.user = {"uid": "test-uid-123", "email": "test@example.com"}
             return f(*args, **kwargs)
@@ -47,14 +47,19 @@ def require_auth(f: F) -> F:
         if not token:
             return jsonify({"error": "Missing Authorization header"}), 401
 
-        # Import lazily so tests/CI don't require firebase-admin unless needed
         try:
             import firebase_admin.auth as firebase_auth  # type: ignore
         except ModuleNotFoundError:
-            return jsonify({"error": "Authentication unavailable"}), 401
+            return jsonify({"error": "Authentication unavailable (firebase-admin not installed)"}), 401
 
         try:
             decoded = firebase_auth.verify_id_token(token)
+        except getattr(firebase_auth, "ExpiredIdTokenError", Exception):
+            return jsonify({"error": "Token has expired"}), 401
+        except getattr(firebase_auth, "RevokedIdTokenError", Exception):
+            return jsonify({"error": "Token has been revoked"}), 401
+        except getattr(firebase_auth, "InvalidIdTokenError", Exception):
+            return jsonify({"error": "Invalid token"}), 401
         except Exception:
             return jsonify({"error": "Authentication failed"}), 401
 
