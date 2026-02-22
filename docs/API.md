@@ -87,7 +87,7 @@ Record a new hazard event. The `user_uid` is taken from the authenticated Fireba
 |-------|------|----------|-------------|
 | `confidence` | `float` | ✅ | Detection confidence score (`0.0 – 1.0`) |
 | `labels` | `string[]` | ✅ | Non-empty list of detected hazard categories (e.g. `["pothole"]`) |
-| `bboxes` | `object[]` | ❌ | Bounding boxes: `[{"x1", "y1", "x2", "y2"}]` (normalised 0–1) |
+| `bboxes` | `object[]` | ❌ | Bounding boxes in pixel coordinates: `[{"x1", "y1", "x2", "y2"}]` |
 | `frame_number` | `integer` | ❌ | 0-based frame index; defaults to `0` |
 | `event_type` | `string` | ❌ | Hazard category; defaults to `labels[0]` if omitted |
 | `photo_url` | `string` | ❌ | Firebase Storage URL of the frame snapshot |
