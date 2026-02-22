@@ -6,11 +6,11 @@ this service layer.
 
 Typical usage from the Flask backend:
 
-    from src.database.services import save_hazard, get_hazards_by_session
-    from src.database.models import Hazard
+    from src.database.services.hazard_service import save_hazard, get_hazards_by_user
+    from src.database.models.hazard import Hazard
 
     hazard = Hazard(
-        session_id=session_id,
+        user_uid=g.user["uid"],
         confidence=0.85,
         labels=["pothole"],
         photo_url="https://storage.googleapis.com/...",
@@ -48,25 +48,15 @@ def get_hazard(hazard_id: str) -> Optional[Hazard]:
     return Hazard.from_dict(doc.to_dict(), doc.id)
 
 
-def get_hazards_by_session(session_id: str) -> List[Hazard]:
+def get_hazards_by_user(user_uid: str) -> List[Hazard]:
     """
-    Return all hazards belonging to a session, ordered by timestamp ascending.
-    Requires a composite index on (session_id ASC, timestamp ASC) — Firestore
+    Return all hazards owned by a user, newest first.
+    Requires a composite index on (user_uid ASC, timestamp DESC) — Firestore
     will print a direct link to create it on the first query if it is missing.
     """
     docs = (
         db.collection(COLLECTION)
-        .where("session_id", "==", session_id)
-        .order_by("timestamp", direction=Query.ASCENDING)
-        .stream()
-    )
-    return [Hazard.from_dict(doc.to_dict(), doc.id) for doc in docs]
-
-
-def get_all_hazards() -> List[Hazard]:
-    """Return every hazard in the collection, newest first."""
-    docs = (
-        db.collection(COLLECTION)
+        .where("user_uid", "==", user_uid)
         .order_by("timestamp", direction=Query.DESCENDING)
         .stream()
     )

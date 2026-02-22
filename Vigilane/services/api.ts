@@ -1,7 +1,7 @@
-import { Hazard, Session, CreateHazardPayload, CreateSessionPayload } from '../types';
+import { Hazard, CreateHazardPayload } from '../types';
 
 // Re-export types so callers can import them from this module
-export type { Hazard, Session, CreateHazardPayload, CreateSessionPayload };
+export type { Hazard, CreateHazardPayload };
 import { Platform } from 'react-native';
 import { auth } from './firebase';
 
@@ -53,45 +53,10 @@ export async function healthCheck(): Promise<{ status: string; service: string }
 }
 
 // ---------------------------------------------------------------------------
-// Sessions  —  POST/GET /sessions, POST /sessions/<id>/end
-// ---------------------------------------------------------------------------
-
-/** POST /sessions — start a new dashcam recording session */
-export function createSession(device_id: string): Promise<Session> {
-  const payload: CreateSessionPayload = { device_id };
-  return request<Session>('/sessions', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-/** GET /sessions — all sessions, newest first */
-export function getSessions(): Promise<Session[]> {
-  return request<Session[]>('/sessions');
-}
-
-/** GET /sessions/<id> — fetch one session */
-export function getSession(id: string): Promise<Session> {
-  return request<Session>(`/sessions/${id}`);
-}
-
-/** POST /sessions/<id>/end — mark session as completed */
-export function endSession(id: string): Promise<{ message: string; session_id: string }> {
-  return request<{ message: string; session_id: string }>(`/sessions/${id}/end`, {
-    method: 'POST',
-  });
-}
-
-/** GET /sessions/<id>/hazards — hazards for a session, ascending by timestamp */
-export function getSessionHazards(sessionId: string): Promise<Hazard[]> {
-  return request<Hazard[]>(`/sessions/${sessionId}/hazards`);
-}
-
-// ---------------------------------------------------------------------------
 // Hazards  —  POST/GET/DELETE /hazards
 // ---------------------------------------------------------------------------
 
-/** GET /hazards — all hazards, newest first */
+/** GET /hazards — the authenticated user's hazards, newest first */
 export function getHazards(): Promise<Hazard[]> {
   return request<Hazard[]>('/hazards');
 }
@@ -101,7 +66,10 @@ export function getHazard(id: string): Promise<Hazard> {
   return request<Hazard>(`/hazards/${id}`);
 }
 
-/** POST /hazards — record a new hazard event (also used for manual reports) */
+/**
+ * POST /hazards — record a new hazard event.
+ * user_uid is set server-side from the auth token; do not include it in payload.
+ */
 export function createHazard(payload: CreateHazardPayload): Promise<Hazard> {
   return request<Hazard>('/hazards', {
     method: 'POST',
@@ -109,7 +77,7 @@ export function createHazard(payload: CreateHazardPayload): Promise<Hazard> {
   });
 }
 
-/** DELETE /hazards/<id> — permanently delete a hazard */
+/** DELETE /hazards/<id> — permanently delete a hazard (owner only) */
 export function deleteHazard(id: string): Promise<{ message: string; hazard_id: string }> {
   return request<{ message: string; hazard_id: string }>(`/hazards/${id}`, {
     method: 'DELETE',

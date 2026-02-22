@@ -9,10 +9,13 @@ All Firebase and Firestore calls are mocked so no real credentials are needed.
 
 import json
 from functools import wraps
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 from flask import g
+
+TEST_UID = "test-uid-123"
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -40,7 +43,7 @@ def client(app):
 
 
 def _auth_headers():
-    """Fake Bearer token header — require_auth is patched to pass through."""
+    """Fake Bearer token header — require_auth is bypassed in TESTING mode."""
     return {"Authorization": "Bearer test-token", "Content-Type": "application/json"}
 
 
@@ -49,7 +52,7 @@ def _mock_require_auth(f):
 
     @wraps(f)
     def decorated(*args, **kwargs):
-        g.user = {"uid": "test-uid-123", "email": "test@example.com"}
+        g.user = {"uid": TEST_UID, "email": "test@example.com"}
         return f(*args, **kwargs)
 
     return decorated
@@ -62,21 +65,22 @@ def _mock_require_auth(f):
 
 def _mock_hazard(
     hazard_id="hazard-1",
-    session_id="session-1",
+    user_uid=TEST_UID,
     status="pending",
 ):
-    from src.database.models.hazard import Hazard
-
-    h = Hazard(
-        session_id=session_id,
+    return SimpleNamespace(
+        id=hazard_id,
+        user_uid=user_uid,
+        event_type="pothole",
         confidence=0.87,
         labels=["pothole"],
         bboxes=[{"x1": 0.1, "y1": 0.55, "x2": 0.4, "y2": 0.80}],
         frame_number=42,
+        timestamp=None,
+        photo_url=None,
+        location=None,
         status=status,
     )
-    h.id = hazard_id
-    return h
 
 
 # ---------------------------------------------------------------------------
@@ -86,20 +90,14 @@ def _mock_hazard(
 
 class TestCreateHazard:
     def test_returns_201_with_valid_payload(self, client):
-        mock_session = MagicMock()
-        mock_hazard = _mock_hazard()
-
         with (
             patch("src.api.routes.hazards.require_auth", _mock_require_auth),
-            patch("src.api.routes.hazards.get_session", return_value=mock_session),
             patch("src.api.routes.hazards.save_hazard", return_value="hazard-1"),
-            patch("src.api.routes.hazards.increment_hazard_count"),
         ):
             resp = client.post(
                 "/hazards",
                 data=json.dumps(
                     {
-                        "session_id": "session-1",
                         "confidence": 0.87,
                         "labels": ["pothole"],
                         "bboxes": [{"x1": 0.1, "y1": 0.55, "x2": 0.4, "y2": 0.80}],
@@ -113,49 +111,45 @@ class TestCreateHazard:
         assert body["id"] == "hazard-1"
         assert body["event_type"] == "pothole"
         assert body["labels"] == ["pothole"]
+        assert body["user_uid"] == TEST_UID
+        assert body["status"] == "pending"
 
     def test_missing_required_fields_returns_400(self, client):
-        with patch("src.api.auth.require_auth", lambda f: f):
+        with patch("src.api.routes.hazards.require_auth", _mock_require_auth):
             resp = client.post(
                 "/hazards",
-                data=json.dumps({"session_id": "session-1"}),
+                data=json.dumps({}),
                 headers=_auth_headers(),
             )
         assert resp.status_code == 400
-        assert "confidence" in resp.get_json()["error"]
+        assert "Missing required fields" in resp.get_json()["error"]
 
-    def test_unknown_session_returns_404(self, client):
-        with (
-            patch("src.api.routes.hazards.require_auth", _mock_require_auth),
-            patch("src.api.routes.hazards.get_session", return_value=None),
-        ):
+    def test_rejects_client_provided_user_uid(self, client):
+        with patch("src.api.routes.hazards.require_auth", _mock_require_auth):
             resp = client.post(
                 "/hazards",
                 data=json.dumps(
                     {
-                        "session_id": "nonexistent",
                         "confidence": 0.5,
                         "labels": ["pothole"],
+                        "user_uid": "attacker-uid",
                     }
                 ),
                 headers=_auth_headers(),
             )
-        assert resp.status_code == 404
+        assert resp.status_code == 400
+        assert "user_uid" in resp.get_json()["error"]
 
     def test_event_type_derived_from_labels(self, client):
         """event_type must be set to labels[0] even if not sent explicitly."""
-        mock_session = MagicMock()
         with (
             patch("src.api.routes.hazards.require_auth", _mock_require_auth),
-            patch("src.api.routes.hazards.get_session", return_value=mock_session),
             patch("src.api.routes.hazards.save_hazard", return_value="h-1"),
-            patch("src.api.routes.hazards.increment_hazard_count"),
         ):
             resp = client.post(
                 "/hazards",
                 data=json.dumps(
                     {
-                        "session_id": "session-1",
                         "confidence": 0.6,
                         "labels": ["alligator cracking"],
                     }
@@ -164,6 +158,26 @@ class TestCreateHazard:
             )
         assert resp.status_code == 201
         assert resp.get_json()["event_type"] == "alligator cracking"
+
+    def test_status_always_pending_on_create(self, client):
+        """Client-provided status must be ignored — always forced to 'pending'."""
+        with (
+            patch("src.api.routes.hazards.require_auth", _mock_require_auth),
+            patch("src.api.routes.hazards.save_hazard", return_value="h-1"),
+        ):
+            resp = client.post(
+                "/hazards",
+                data=json.dumps(
+                    {
+                        "confidence": 0.6,
+                        "labels": ["pothole"],
+                        "status": "reported",
+                    }
+                ),
+                headers=_auth_headers(),
+            )
+        assert resp.status_code == 201
+        assert resp.get_json()["status"] == "pending"
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +222,15 @@ class TestDismissHazard:
         ):
             resp = client.post("/hazards/missing/dismiss", headers=_auth_headers())
         assert resp.status_code == 404
+
+    def test_dismiss_forbidden_for_non_owner(self, client):
+        mock_hazard = _mock_hazard(user_uid="another-user-uid", status="pending")
+        with (
+            patch("src.api.routes.hazards.require_auth", _mock_require_auth),
+            patch("src.api.routes.hazards.get_hazard", return_value=mock_hazard),
+        ):
+            resp = client.post("/hazards/hazard-1/dismiss", headers=_auth_headers())
+        assert resp.status_code == 403
 
 
 # ---------------------------------------------------------------------------
