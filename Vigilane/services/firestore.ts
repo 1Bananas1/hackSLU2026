@@ -80,11 +80,18 @@ export interface WriteHazardInput {
  * Uses a simple where-only query (no composite index required).
  */
 export async function getUserHazards(): Promise<Hazard[]> {
+  console.log('[firestore] getUserHazards started');
   const user = auth.currentUser;
-  if (!user) return [];
+  console.log('[firestore] currentUser:', user?.uid ?? 'No user logged in');
+  if (!user) {
+    console.warn('[firestore] No user logged in, returning empty array');
+    return [];
+  }
   try {
+    console.log('[firestore] Querying hazards for user:', user.uid);
     const q = query(collection(db, 'hazards'), where('user_uid', '==', user.uid));
     const snap = await getDocs(q);
+    console.log('[firestore] Query completed, found', snap.docs.length, 'documents');
     const docs: Hazard[] = snap.docs.map((d) => {
       const data = d.data();
       const raw = data.timestamp;
@@ -106,6 +113,7 @@ export async function getUserHazards(): Promise<Hazard[]> {
     });
     // Sort newest first in memory (avoids composite index requirement)
     docs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    console.log('[firestore] Returning', docs.length, 'sorted hazards');
     return docs;
   } catch (err) {
     console.error('[firestore] getUserHazards failed:', err);
