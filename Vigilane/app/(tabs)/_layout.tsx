@@ -28,9 +28,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Debug',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="developer-mode" size={size} color={color} />
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen
