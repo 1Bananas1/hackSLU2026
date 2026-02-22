@@ -38,6 +38,7 @@ from src.database.services.hazard_service import (
     update_hazard_status,
 )
 from src.database.services.report_service import create_report
+from src.database.services.session_service import get_session, increment_hazard_count
 
 hazards_bp = Blueprint("hazards", __name__)
 
