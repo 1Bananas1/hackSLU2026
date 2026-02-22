@@ -36,7 +36,7 @@
  *   3 transverse cracking · 4 rutting · 5 patching
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { useTensorflowModel } from 'react-native-fast-tflite';
@@ -118,7 +118,12 @@ export interface AlertMetadata {
 // Hook
 // ---------------------------------------------------------------------------
 
-export function usePotholeDetector() {
+/**
+ * @param confidenceThreshold  Per-detection YOLO confidence gate (0–1).
+ *   Pass 0.99 to suppress nearly all detections (silent / muted mode).
+ *   Defaults to CONFIDENCE_THRESHOLD (0.12) when omitted.
+ */
+export function usePotholeDetector(confidenceThreshold: number = CONFIDENCE_THRESHOLD) {
   // React state — convenient for components that prefer useState semantics.
   const [lastAlert, setLastAlert] = useState<AlertMetadata | null>(null);
 
@@ -133,6 +138,14 @@ export function usePotholeDetector() {
   );
 
   const { resize } = useResizePlugin();
+
+  // ── Dynamic confidence threshold (worklet-safe via SharedValue) ──────────
+  // SharedValues are stable JSI objects readable from the worklet thread.
+  // Assigning .value from the JS thread is safe and takes effect on the next frame.
+  const thresholdSV = useSharedValue(confidenceThreshold);
+  useEffect(() => {
+    thresholdSV.value = confidenceThreshold;
+  }, [confidenceThreshold, thresholdSV]);
 
   // ── Circular buffer (Reanimated SharedValues — worklet-safe) ────────────
   // Three independent slots avoids array mutation inside the worklet,
@@ -209,8 +222,9 @@ export function usePotholeDetector() {
         const base = i * 6;
         const confidence = raw[base + 4];
 
-        // 1. Confidence gate — mirrors ML pipeline CONFIDENCE_THRESHOLD.
-        if (confidence < CONFIDENCE_THRESHOLD) continue;
+        // 1. Confidence gate — reads thresholdSV which is updated from the
+        //    JS thread whenever the user changes the volume slider.
+        if (confidence < thresholdSV.value) continue;
 
         const classId = Math.round(raw[base + 5]);
 

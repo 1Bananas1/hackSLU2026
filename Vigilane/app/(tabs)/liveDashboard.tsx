@@ -17,10 +17,11 @@ import {
   useCameraPermission,
 } from "react-native-vision-camera";
 import * as Location from "expo-location";
+import * as Speech from "expo-speech";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
 import { usePotholeDetector } from "@/hooks/usePotholeDetector";
-import { writeHazard } from "@/services/firestore";
+import { writeHazard, getUserSettings } from "@/services/firestore";
 import { createSession, endSession, createHazard } from "@/services/api";
 import { useAuth } from "@/context/AuthContext";
 import type { Hazard } from "@/types";
@@ -77,10 +78,35 @@ export default function VigilaneLiveDashboard() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const { toast, showToast } = useToast();
 
+  // ── Alert volume / confidence threshold ───────────────────────────────────
+  // Reload from Firestore whenever the screen comes into focus so that a
+  // slider change in Settings takes effect immediately on return.
+  const [alertVolume, setAlertVolume] = useState(100);
+  const [audioAlertsEnabled, setAudioAlertsEnabled] = useState(true);
+  // Keep a ref so the lastAlert effect always reads the live value without
+  // needing to be in that effect's dependency array (which would re-fire
+  // writeHazard every time the user changes the audio toggle in Settings).
+  const audioAlertsEnabledRef = useRef(true);
+  useEffect(() => {
+    audioAlertsEnabledRef.current = audioAlertsEnabled;
+  }, [audioAlertsEnabled]);
+
+  useEffect(() => {
+    if (!user || !isFocused) return;
+    getUserSettings(user.uid).then((s) => {
+      setAlertVolume(s.alertVolume ?? 100);
+      setAudioAlertsEnabled(s.audioAlertsEnabled ?? true);
+    });
+  }, [user, isFocused]);
+
+  // volume === 0  →  silent mode  →  raise threshold to 0.99 (≈ disabled)
+  // volume  > 0  →  normal mode  →  default threshold 0.12
+  const confidenceThreshold = alertVolume === 0 ? 0.99 : 0.12;
+
   // ── Camera ────────────────────────────────────────────────────────────────
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice("back");
-  const { frameProcessor, lastAlert, modelState } = usePotholeDetector();
+  const { frameProcessor, lastAlert, modelState } = usePotholeDetector(confidenceThreshold);
 
   // ── Speed (GPS) ───────────────────────────────────────────────────────────
   const [speedMps, setSpeedMps] = useState<number | null>(null);
@@ -158,6 +184,11 @@ export default function VigilaneLiveDashboard() {
       ]),
     ).start();
   }, [pulseAnim, bounceAnim]);
+
+  // Stop speech whenever the screen loses focus (tab switch / background).
+  useEffect(() => {
+    if (!isFocused) Speech.stop();
+  }, [isFocused]);
 
   // Recording timer — only ticks while recording is active
   useEffect(() => {
@@ -243,6 +274,16 @@ export default function VigilaneLiveDashboard() {
       frameNumber: 0,
       user_uid: user?.uid,
     });
+
+    // ── Voice alert on the phone ──────────────────────────────────────────
+    // alertVolume === 0 already raises confidenceThreshold to 0.99, so by
+    // the time lastAlert fires we know the user hasn't silenced the app.
+    // We only skip the speech if the Audio Alerts toggle is off.
+    if (audioAlertsEnabledRef.current) {
+      const label = lastAlert.labels[0] ?? "hazard";
+      Speech.stop(); // cancel any still-speaking previous alert
+      Speech.speak(`${label} detected`, { rate: 1.1 });
+    }
 
     const clearTimer = setTimeout(() => setLatestHazard(null), 5_000);
     return () => clearTimeout(clearTimer);

@@ -81,4 +81,6 @@ export interface Settings {
   audioAlertsEnabled: boolean;
   visualFlashesEnabled: boolean;
   autoUploadEnabled: boolean;
+  /** Alert volume 0-100.  0 = silent → confidence threshold raised to 0.99. */
+  alertVolume: number;
 }
