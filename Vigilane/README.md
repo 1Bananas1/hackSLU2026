@@ -1,50 +1,47 @@
-# Welcome to your Expo app 👋
+# Vigilane — Mobile App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+React Native (Expo Router) frontend for the Vigilane road hazard detection system.
 
-## Get started
+See the root [`docs/readme.md`](../docs/readme.md) for full project setup instructions.
 
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Quick start
 
 ```bash
-npm run reset-project
+# Install dependencies
+npm install --legacy-peer-deps
+
+# Create .env.local with your Firebase + Google OAuth keys (see docs/readme.md §2b)
+
+# Android dev build — required for Google Sign-In
+npx expo run:android
+
+# Or start the dev server for an already-installed build
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+> **Google Sign-In does not work in Expo Go.** Use `npx expo run:android` to build a dev client with the correct redirect URI scheme.
 
-## Learn more
+## App structure
 
-To learn more about developing your project with Expo, look at the following resources:
+```
+app/
+  _layout.tsx          # Root layout + AuthProvider + AuthGuard
+  login.tsx            # Google Sign-In screen
+  hazardDetails.tsx    # Single hazard detail view
+  (tabs)/
+    index.tsx          # Home / dashboard
+    liveDashboard.tsx  # Live detection feed
+    hazardHistory.tsx  # Past incidents
+    settings.tsx       # User settings + sign out
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+components/            # Shared UI components
+context/               # AuthContext (Firebase auth state)
+services/
+  firebase.ts          # Firebase app init (reads EXPO_PUBLIC_FIREBASE_* vars)
+  api.ts               # Backend API client (reads EXPO_PUBLIC_API_BASE_URL)
+constants/
+  theme.ts             # Design tokens
+types/
+  index.ts             # Shared TypeScript types
+```
 
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
