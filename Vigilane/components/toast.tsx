@@ -100,7 +100,7 @@ export function Toast({ message, type, visible }: ToastState) {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: 60,
+    top: 72,
     left: 20,
     right: 20,
     flexDirection: 'row',

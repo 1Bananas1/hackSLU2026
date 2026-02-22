@@ -1,5 +1,6 @@
 from datetime import datetime
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 import os
 
 from database.models.hazard import Hazard
@@ -22,6 +23,7 @@ except Exception as exc:  # pragma: no cover - startup safeguard
     SERVICE_IMPORT_ERROR = str(exc)
 
 app = Flask(__name__)
+CORS(app)
 
 
 def _iso(value):
@@ -59,21 +61,6 @@ def _hazard_to_json(hazard):
 
 def _service_ready():
     return SERVICE_IMPORT_ERROR is None
-
-
-@app.after_request
-def add_cors_headers(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-    response.headers["Access-Control-Allow-Methods"] = (
-        "GET, POST, PATCH, DELETE, OPTIONS"
-    )
-    return response
-
-
-@app.route("/api/<path:_>", methods=["OPTIONS"])
-def options_handler(_):
-    return ("", 204)
 
 
 @app.get("/")

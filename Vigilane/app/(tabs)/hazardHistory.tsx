@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { getHazards } from '../../services/api';
+import { getUserHazards } from '../../services/firestore';
 import { Hazard } from '../../types';
 
 // ---------------------------------------------------------------------------
@@ -133,7 +133,7 @@ export default function ReportHistory() {
     setLoading(true);
     setError(null);
     try {
-      const data = await getHazards();
+      const data = await getUserHazards();
       setHazards(data);
     } catch {
       setError('Failed to load hazards. Check your connection.');

@@ -7,6 +7,7 @@ import {
   StatusBar,
   Platform,
   Animated,
+  Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -41,6 +42,33 @@ export default function VigilaneLiveDashboard() {
   const isFocused = useIsFocused();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const bounceAnim = useRef(new Animated.Value(0)).current;
+
+  // ── Button morph animation ─────────────────────────────────────────────────
+  // widthAnim / colorAnim: JS-thread (layout props); nativeAnim: native thread
+  const BUTTON_FULL_WIDTH = Dimensions.get("window").width - 32; // bottomOverlay paddingH×2
+  const BUTTON_SIZE = 64;
+  const LIFT_AMOUNT = BUTTON_SIZE + 12; // circle clears report button by 12px gap
+  const widthAnim = useRef(new Animated.Value(BUTTON_FULL_WIDTH)).current;
+  const colorAnim = useRef(new Animated.Value(0)).current;  // 0 = green, 1 = red
+  const nativeAnim = useRef(new Animated.Value(0)).current; // 0 = stopped, 1 = recording
+
+  // Derived values — kept as stable references (not re-created each render)
+  const buttonBgColor = useRef(
+    colorAnim.interpolate({ inputRange: [0, 1], outputRange: ["#16a34a", "#dc2626"] }),
+  ).current;
+  const startContentOpacity = useRef(
+    colorAnim.interpolate({ inputRange: [0, 0.3], outputRange: [1, 0], extrapolate: "clamp" }),
+  ).current;
+  const stopContentOpacity = useRef(
+    colorAnim.interpolate({ inputRange: [0.5, 1], outputRange: [0, 1], extrapolate: "clamp" }),
+  ).current;
+  const stopTranslateY = useRef(
+    nativeAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -LIFT_AMOUNT] }),
+  ).current;
+  const reportOpacity = nativeAnim;
+  const reportTranslateY = useRef(
+    nativeAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }),
+  ).current;
 
   const [isRecording, setIsRecording] = useState(false);
   const [latestHazard, setLatestHazard] = useState<Hazard | null>(null);
@@ -146,8 +174,19 @@ export default function VigilaneLiveDashboard() {
     return created;
   };
 
+  const runMorphAnim = (toRecording: boolean) => {
+    const toVal = toRecording ? 1 : 0;
+    const toWidth = toRecording ? BUTTON_SIZE : BUTTON_FULL_WIDTH;
+    Animated.parallel([
+      Animated.timing(widthAnim, { toValue: toWidth, duration: 320, useNativeDriver: false }),
+      Animated.timing(colorAnim, { toValue: toVal, duration: 320, useNativeDriver: false }),
+      Animated.timing(nativeAnim, { toValue: toVal, duration: 320, useNativeDriver: true }),
+    ]).start();
+  };
+
   const handleToggleSession = async () => {
     if (isRecording) {
+      runMorphAnim(false); // immediate visual feedback
       try {
         if (sessionId) {
           await endSession(sessionId);
@@ -165,6 +204,7 @@ export default function VigilaneLiveDashboard() {
       return;
     }
 
+    runMorphAnim(true); // immediate visual feedback
     try {
       const deviceId = await getDeviceId();
       const session = await createSession(deviceId);
@@ -172,6 +212,7 @@ export default function VigilaneLiveDashboard() {
       setIsRecording(true);
       showToast("Recording started", "success");
     } catch (err) {
+      runMorphAnim(false); // revert on failure
       console.error("Start session failed:", err);
       showToast("Failed to start session", "error");
     }
@@ -278,20 +319,18 @@ export default function VigilaneLiveDashboard() {
 
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.topBar}>
+          {/* Left — Vigilane wordmark */}
           <View style={styles.glassPanel}>
-            <MaterialIcons
-              name="verified-user"
-              size={20}
-              color={isRecording ? "#34d399" : "#94a3b8"}
-            />
-            <View style={styles.statusTextContainer}>
-              <Text style={styles.statusTitle}>Vigilane</Text>
-              <Text style={styles.statusSubtitle}>
-                {isRecording ? "RECORDING" : "STANDBY"}
-              </Text>
-            </View>
+            <Text style={styles.statusTitle}>Vigilane</Text>
           </View>
 
+          {/* Center — live speed */}
+          <View style={[styles.glassPanel, styles.recPanel]}>
+            <MaterialIcons name="speed" size={16} color="#e2e8f0" />
+            <Text style={styles.speedText}>{speedLabel}</Text>
+          </View>
+
+          {/* Right — REC timer / STANDBY */}
           <View style={[styles.glassPanel, styles.recPanel]}>
             {isRecording ? (
               <>
@@ -309,12 +348,6 @@ export default function VigilaneLiveDashboard() {
               <Text style={styles.recText}>STANDBY</Text>
             )}
           </View>
-        </View>
-
-        {/* Speed widget */}
-        <View style={styles.speedWidget}>
-          <MaterialIcons name="speed" size={18} color="#e2e8f0" />
-          <Text style={styles.speedText}>{speedLabel}</Text>
         </View>
 
         {showAlert && latestHazard && latestHazard.bboxes.length > 0 && (
@@ -376,41 +409,77 @@ export default function VigilaneLiveDashboard() {
             </Animated.View>
           )}
 
-          <View style={styles.dashGrid}>
-            <TouchableOpacity
+          {/* ── Morphing button area ─────────────────────────────────── */}
+          <View style={styles.buttonArea}>
+            {/* Report Hazard — fades up into view when recording starts */}
+            <Animated.View
               style={[
-                styles.sessionButton,
-                isRecording
-                  ? styles.sessionButtonStop
-                  : styles.sessionButtonStart,
+                styles.reportBtnWrapper,
+                {
+                  opacity: reportOpacity,
+                  transform: [{ translateY: reportTranslateY }],
+                },
               ]}
-              activeOpacity={0.8}
-              onPress={handleToggleSession}
+              pointerEvents={isRecording ? "auto" : "none"}
             >
-              <MaterialIcons
-                name={isRecording ? "stop-circle" : "play-circle-filled"}
-                size={28}
-                color="#fff"
-              />
-              <Text style={styles.reportButtonText}>
-                {isRecording ? "Stop" : "Start"}
-              </Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.reportButton,
+                  reporting && styles.reportButtonDisabled,
+                ]}
+                activeOpacity={0.8}
+                onPress={handleReportHazard}
+                disabled={reporting}
+              >
+                <MaterialIcons name="add-alert" size={28} color="#fff" />
+                <Text style={styles.reportButtonText}>
+                  {reporting ? "Reporting…" : "Report Hazard"}
+                </Text>
+              </TouchableOpacity>
+            </Animated.View>
 
-            <TouchableOpacity
+            {/* Start/Stop — morphs width (wide→circle) and color (green→red),
+                slides up to float above the Report Hazard button */}
+            <Animated.View
               style={[
-                styles.reportButton,
-                reporting && styles.reportButtonDisabled,
+                styles.sessionBtnOuter,
+                { transform: [{ translateY: stopTranslateY }] },
               ]}
-              activeOpacity={0.8}
-              onPress={handleReportHazard}
-              disabled={reporting}
             >
-              <MaterialIcons name="add-alert" size={28} color="#fff" />
-              <Text style={styles.reportButtonText}>
-                {reporting ? "Reporting…" : "Report Hazard"}
-              </Text>
-            </TouchableOpacity>
+              <Animated.View
+                style={[
+                  styles.sessionBtnInner,
+                  { width: widthAnim, backgroundColor: buttonBgColor },
+                ]}
+              >
+                <TouchableOpacity
+                  style={styles.sessionBtnTouch}
+                  activeOpacity={0.8}
+                  onPress={handleToggleSession}
+                >
+                  {/* Start content — fades out as button shrinks */}
+                  <Animated.View
+                    style={[styles.sessionContent, { opacity: startContentOpacity }]}
+                  >
+                    <MaterialIcons name="play-circle-filled" size={28} color="#fff" />
+                    <Text style={styles.reportButtonText}>Start Session</Text>
+                  </Animated.View>
+
+                  {/* Stop content — fades in once button is near-circle */}
+                  <Animated.View
+                    style={[
+                      styles.sessionContent,
+                      styles.stopContent,
+                      StyleSheet.absoluteFill,
+                      { opacity: stopContentOpacity },
+                    ]}
+                  >
+                    <MaterialIcons name="stop" size={26} color="#fff" />
+                    <Text style={styles.stopText}>Stop</Text>
+                  </Animated.View>
+                </TouchableOpacity>
+              </Animated.View>
+            </Animated.View>
           </View>
         </View>
       </SafeAreaView>
@@ -454,14 +523,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.1)",
     gap: 8,
   },
-  statusTextContainer: { justifyContent: "center" },
   statusTitle: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  statusSubtitle: {
-    color: "#94a3b8",
-    fontSize: 10,
-    fontWeight: "600",
-    letterSpacing: 1,
-  },
   recPanel: { gap: 6 },
   pulsingDot: {
     width: 12,
@@ -477,21 +539,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
 
-  speedWidget: {
-    marginTop: 10,
-    marginLeft: 16,
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "rgba(16, 24, 34, 0.7)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-    zIndex: 20,
-  },
   speedText: {
     color: "#e2e8f0",
     fontSize: 12,
@@ -557,33 +604,18 @@ const styles = StyleSheet.create({
   alertTextContainer: { flex: 1 },
   alertTitle: { color: "#0f172a", fontSize: 14, fontWeight: "700" },
   alertSubtitle: { color: "#334155", fontSize: 12, fontWeight: "600" },
-  dashGrid: { flexDirection: "row", alignItems: "flex-end", gap: 12 },
-  sessionButton: {
-    width: 88,
+  // ── Morphing button area ──────────────────────────────────────────────────
+  buttonArea: {
     height: 64,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 32,
-    gap: 6,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-    elevation: 8,
     marginBottom: 16,
+    // overflow is 'visible' by default in RN — the floating circle can extend above
   },
-  sessionButtonStart: {
-    backgroundColor: "#16a34a",
-    shadowColor: "#16a34a",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-  },
-  sessionButtonStop: {
-    backgroundColor: "#dc2626",
-    shadowColor: "#dc2626",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
+  reportBtnWrapper: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 64,
   },
   reportButton: {
     flex: 1,
@@ -601,8 +633,48 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 10,
     elevation: 8,
-    marginBottom: 16,
   },
   reportButtonDisabled: { opacity: 0.5 },
   reportButtonText: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  sessionBtnOuter: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    zIndex: 10,
+  },
+  sessionBtnInner: {
+    height: 64,
+    borderRadius: 32,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  sessionBtnTouch: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sessionContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  stopContent: {
+    flexDirection: "column",
+    gap: 2,
+  },
+  stopText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
 });

@@ -25,7 +25,7 @@ export default function TabLayout() {
       initialRouteName="liveDashboard"
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { backgroundColor: colors.background, borderTopColor: colors.border },
+        tabBarStyle: { backgroundColor: colors.background, borderTopColor: colors.border, paddingBottom: 6, height: 58 },
         tabBarActiveTintColor: colors.active,
         tabBarInactiveTintColor: colors.inactive,
       }}

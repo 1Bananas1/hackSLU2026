@@ -11,10 +11,11 @@
  *   users/{uid} → { settings: Settings }
  */
 
-import { addDoc, collection, doc, getDoc, increment, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, increment, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 
+import { auth } from './firebase';
 import { db } from './firebase';
-import type { BoundingBox, Settings } from '@/types';
+import type { BoundingBox, Hazard, Settings } from '@/types';
 
 // ---------------------------------------------------------------------------
 // User settings — stored as users/{uid}.settings
@@ -72,6 +73,44 @@ export interface WriteHazardInput {
   labels: string[];
   frameNumber?: number;
   user_uid?: string;
+}
+
+/**
+ * Fetch all hazards belonging to the current user, sorted newest first.
+ * Uses a simple where-only query (no composite index required).
+ */
+export async function getUserHazards(): Promise<Hazard[]> {
+  const user = auth.currentUser;
+  if (!user) return [];
+  try {
+    const q = query(collection(db, 'hazards'), where('user_uid', '==', user.uid));
+    const snap = await getDocs(q);
+    const docs: Hazard[] = snap.docs.map((d) => {
+      const data = d.data();
+      const raw = data.timestamp;
+      const timestamp =
+        raw?.toDate?.()?.toISOString?.() ??
+        (typeof raw === 'string' ? raw : new Date().toISOString());
+      return {
+        id: d.id,
+        user_uid: data.user_uid ?? '',
+        event_type: data.labels?.[0] ?? data.event_type ?? 'unknown',
+        confidence: data.confidence ?? 0,
+        labels: data.labels ?? [],
+        bboxes: data.bboxes ?? [],
+        frame_number: data.frame_number ?? 0,
+        timestamp,
+        status: data.status ?? 'pending',
+        photo_url: data.photo_url ?? null,
+      } as Hazard;
+    });
+    // Sort newest first in memory (avoids composite index requirement)
+    docs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return docs;
+  } catch (err) {
+    console.error('[firestore] getUserHazards failed:', err);
+    throw err;
+  }
 }
 
 /**
