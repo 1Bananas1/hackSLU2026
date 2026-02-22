@@ -18,6 +18,7 @@ from flask import g
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def app():
     """Create a test Flask app with Firebase and Firestore mocked out."""
@@ -27,6 +28,7 @@ def app():
         patch("flask_cors.CORS"),
     ):
         from src.api import create_app
+
         flask_app = create_app()
         flask_app.config["TESTING"] = True
         yield flask_app
@@ -44,10 +46,12 @@ def _auth_headers():
 
 def _mock_require_auth(f):
     """Auth stub that bypasses Firebase token verification and sets g.user."""
+
     @wraps(f)
     def decorated(*args, **kwargs):
         g.user = {"uid": "test-uid-123", "email": "test@example.com"}
         return f(*args, **kwargs)
+
     return decorated
 
 
@@ -55,12 +59,14 @@ def _mock_require_auth(f):
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _mock_hazard(
     hazard_id="hazard-1",
     session_id="session-1",
     status="pending",
 ):
     from src.database.models.hazard import Hazard
+
     h = Hazard(
         session_id=session_id,
         confidence=0.87,
@@ -77,6 +83,7 @@ def _mock_hazard(
 # POST /hazards
 # ---------------------------------------------------------------------------
 
+
 class TestCreateHazard:
     def test_returns_201_with_valid_payload(self, client):
         mock_session = MagicMock()
@@ -90,13 +97,15 @@ class TestCreateHazard:
         ):
             resp = client.post(
                 "/hazards",
-                data=json.dumps({
-                    "session_id": "session-1",
-                    "confidence": 0.87,
-                    "labels": ["pothole"],
-                    "bboxes": [{"x1": 0.1, "y1": 0.55, "x2": 0.4, "y2": 0.80}],
-                    "frame_number": 42,
-                }),
+                data=json.dumps(
+                    {
+                        "session_id": "session-1",
+                        "confidence": 0.87,
+                        "labels": ["pothole"],
+                        "bboxes": [{"x1": 0.1, "y1": 0.55, "x2": 0.4, "y2": 0.80}],
+                        "frame_number": 42,
+                    }
+                ),
                 headers=_auth_headers(),
             )
         assert resp.status_code == 201
@@ -122,11 +131,13 @@ class TestCreateHazard:
         ):
             resp = client.post(
                 "/hazards",
-                data=json.dumps({
-                    "session_id": "nonexistent",
-                    "confidence": 0.5,
-                    "labels": ["pothole"],
-                }),
+                data=json.dumps(
+                    {
+                        "session_id": "nonexistent",
+                        "confidence": 0.5,
+                        "labels": ["pothole"],
+                    }
+                ),
                 headers=_auth_headers(),
             )
         assert resp.status_code == 404
@@ -142,11 +153,13 @@ class TestCreateHazard:
         ):
             resp = client.post(
                 "/hazards",
-                data=json.dumps({
-                    "session_id": "session-1",
-                    "confidence": 0.6,
-                    "labels": ["alligator cracking"],
-                }),
+                data=json.dumps(
+                    {
+                        "session_id": "session-1",
+                        "confidence": 0.6,
+                        "labels": ["alligator cracking"],
+                    }
+                ),
                 headers=_auth_headers(),
             )
         assert resp.status_code == 201
@@ -156,6 +169,7 @@ class TestCreateHazard:
 # ---------------------------------------------------------------------------
 # POST /hazards/<id>/dismiss
 # ---------------------------------------------------------------------------
+
 
 class TestDismissHazard:
     def test_dismisses_pending_hazard(self, client):
@@ -200,6 +214,7 @@ class TestDismissHazard:
 # POST /hazards/<id>/report
 # ---------------------------------------------------------------------------
 
+
 class TestReportHazard:
     def test_reports_pending_hazard(self, client):
         mock_hazard = _mock_hazard(status="pending")
@@ -211,10 +226,12 @@ class TestReportHazard:
         ):
             resp = client.post(
                 "/hazards/hazard-1/report",
-                data=json.dumps({
-                    "reporter_name": "Jane Doe",
-                    "reporter_email": "jane@example.com",
-                }),
+                data=json.dumps(
+                    {
+                        "reporter_name": "Jane Doe",
+                        "reporter_email": "jane@example.com",
+                    }
+                ),
                 headers=_auth_headers(),
             )
         assert resp.status_code == 201
@@ -230,10 +247,12 @@ class TestReportHazard:
         ):
             resp = client.post(
                 "/hazards/hazard-1/report",
-                data=json.dumps({
-                    "reporter_name": "Jane",
-                    "reporter_email": "jane@example.com",
-                }),
+                data=json.dumps(
+                    {
+                        "reporter_name": "Jane",
+                        "reporter_email": "jane@example.com",
+                    }
+                ),
                 headers=_auth_headers(),
             )
         assert resp.status_code == 409

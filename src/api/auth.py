@@ -35,6 +35,7 @@ def require_auth(f: F) -> F:
 
     In Flask TESTING mode: bypasses verification and sets a fake user.
     """
+
     @wraps(f)
     def decorated(*args, **kwargs):
         # ✅ Unit tests: bypass Firebase auth entirely

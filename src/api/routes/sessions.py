@@ -76,6 +76,7 @@ def close_session(session_id: str):
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _session_to_json(session) -> dict:
     return {
         "id": session.id,

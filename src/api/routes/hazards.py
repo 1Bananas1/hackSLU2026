@@ -78,7 +78,9 @@ def create_hazard():
     status = data.get("status", "pending")
     valid_statuses = {"pending", "reported", "dismissed"}
     if status not in valid_statuses:
-        return jsonify({"error": f"status must be one of {sorted(valid_statuses)}"}), 400
+        return jsonify(
+            {"error": f"status must be one of {sorted(valid_statuses)}"}
+        ), 400
 
     session_id = data["session_id"]
     if get_session(session_id) is None:
@@ -90,7 +92,9 @@ def create_hazard():
         labels=labels,
         bboxes=data.get("bboxes", []),
         frame_number=int(data.get("frame_number", 0)),
-        event_type=data.get("event_type", ""),  # derived from labels[0] in __post_init__
+        event_type=data.get(
+            "event_type", ""
+        ),  # derived from labels[0] in __post_init__
         photo_url=data.get("photo_url"),
         location=data.get("location"),
         status=status,
@@ -147,7 +151,9 @@ def dismiss_hazard(hazard_id: str):
     if hazard.status == "dismissed":
         return jsonify({"error": "Hazard is already dismissed"}), 409
     if hazard.status == "reported":
-        return jsonify({"error": "Cannot dismiss a hazard that has already been reported"}), 409
+        return jsonify(
+            {"error": "Cannot dismiss a hazard that has already been reported"}
+        ), 409
 
     update_hazard_status(hazard_id, "dismissed")
     return jsonify({"message": "Hazard dismissed", "hazard_id": hazard_id})
@@ -193,11 +199,13 @@ def report_hazard(hazard_id: str):
 
     update_hazard_status(hazard_id, "reported")
 
-    return jsonify({
-        "message": "Report submitted",
-        "report_id": report_id,
-        "hazard_id": hazard_id,
-    }), 201
+    return jsonify(
+        {
+            "message": "Report submitted",
+            "report_id": report_id,
+            "hazard_id": hazard_id,
+        }
+    ), 201
 
 
 @hazards_bp.get("/sessions/<session_id>/hazards")
@@ -213,6 +221,7 @@ def list_hazards_for_session(session_id: str):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _hazard_to_json(hazard) -> dict:
     return {

@@ -15,6 +15,7 @@ from .config import initialize_firebase
 
 class _LazyFirestoreClient:
     """Proxy that initializes Firebase/Firestore only when first used."""
+
     def __init__(self) -> None:
         self._client: Optional[Any] = None
 
@@ -34,7 +35,11 @@ class _LazyFirestoreClient:
         return getattr(self._get(), name)
 
     def __repr__(self) -> str:  # pragma: no cover
-        return "<LazyFirestoreClient (uninitialized)>" if self._client is None else repr(self._client)
+        return (
+            "<LazyFirestoreClient (uninitialized)>"
+            if self._client is None
+            else repr(self._client)
+        )
 
 
 def get_db() -> Any:

@@ -33,7 +33,7 @@ def _fernet() -> Fernet:
         raise RuntimeError(
             "ENCRYPTION_KEY environment variable is not set. "
             "Generate one with: "
-            "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            'python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
         )
     return Fernet(key.encode())
 

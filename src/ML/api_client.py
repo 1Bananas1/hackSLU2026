@@ -22,6 +22,7 @@ from typing import Optional
 
 try:
     import requests
+
     _REQUESTS_AVAILABLE = True
 except ImportError:
     _REQUESTS_AVAILABLE = False
@@ -80,7 +81,9 @@ class HazardApiClient:
             print(f"[API] Session created: {session_id}")
             return session_id
         except requests.HTTPError as exc:
-            print(f"[API] Failed to create session (HTTP {exc.response.status_code}): {exc}")
+            print(
+                f"[API] Failed to create session (HTTP {exc.response.status_code}): {exc}"
+            )
             return None
         except Exception as exc:
             print(f"[API] Failed to create session: {exc}")
@@ -173,7 +176,9 @@ class HazardApiClient:
             print(f"[API] Hazard reported: {hazard_id} (confidence={confidence:.2f})")
             return hazard_id
         except requests.HTTPError as exc:
-            print(f"[API] Failed to post hazard (HTTP {exc.response.status_code}): {exc}")
+            print(
+                f"[API] Failed to post hazard (HTTP {exc.response.status_code}): {exc}"
+            )
             return None
         except Exception as exc:
             print(f"[API] Failed to post hazard: {exc}")

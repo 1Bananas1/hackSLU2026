@@ -189,37 +189,46 @@ def api_delete_hazard(hazard_id):
     delete_hazard(hazard_id)
     return jsonify({"deleted": True, "hazard_id": hazard_id})
 
+
 # ---------------------------------------------------------------------------
 # Route aliases (tests expect non-/api paths)
 # ---------------------------------------------------------------------------
+
 
 @app.post("/sessions")
 def create_session_alias():
     return api_create_session()
 
+
 @app.get("/sessions")
 def get_sessions_alias():
     return api_get_sessions()
+
 
 @app.get("/sessions/<session_id>")
 def get_session_alias(session_id):
     return api_get_session(session_id)
 
+
 @app.patch("/sessions/<session_id>/end")
 def end_session_alias(session_id):
     return api_end_session(session_id)
+
 
 @app.get("/hazards")
 def get_hazards_alias():
     return api_get_hazards()
 
+
 @app.post("/hazards")
 def create_hazard_alias():
     return api_create_hazard()
 
+
 @app.delete("/hazards/<hazard_id>")
 def delete_hazard_alias(hazard_id):
     return api_delete_hazard(hazard_id)
+
 
 if __name__ == "__main__":
     host = os.getenv("FLASK_HOST", "0.0.0.0")

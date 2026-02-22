@@ -69,6 +69,7 @@ def get_report(report_id: str) -> Optional[Report]:
 def get_reports_by_hazard(hazard_id: str) -> List[Report]:
     """Return all reports linked to a hazard, newest first."""
     from google.cloud.firestore import Query
+
     docs = (
         db.collection(COLLECTION)
         .where("hazard_id", "==", hazard_id)

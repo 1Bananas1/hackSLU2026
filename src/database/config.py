@@ -41,7 +41,9 @@ def initialize_firebase() -> None:
         return
 
     key_path = os.getenv("FIREBASE_KEY_PATH")
-    resolved_key_path = Path(key_path) if key_path else PROJECT_ROOT / "serviceAccountKey.json"
+    resolved_key_path = (
+        Path(key_path) if key_path else PROJECT_ROOT / "serviceAccountKey.json"
+    )
 
     if not resolved_key_path.exists():
         raise FileNotFoundError(

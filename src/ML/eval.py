@@ -32,9 +32,9 @@ sys.path.insert(0, os.path.dirname(__file__))
 from main import load_model, run_inference, annotate_frame
 
 EVAL_DIR = "dataset/eval"
-CONF_THRESHOLD = 0.12     # must match main.py CONFIDENCE_THRESHOLD
-SAMPLE_EVERY = 45         # save one non-detected frame every N frames (false-negative check)
-DETECT_COOLDOWN = 30      # min frames between saving detected frames (avoid duplicates)
+CONF_THRESHOLD = 0.12  # must match main.py CONFIDENCE_THRESHOLD
+SAMPLE_EVERY = 45  # save one non-detected frame every N frames (false-negative check)
+DETECT_COOLDOWN = 30  # min frames between saving detected frames (avoid duplicates)
 VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".m4v"}
 
 
@@ -84,33 +84,41 @@ def process_videos(model):
                 raw_path = os.path.join(out_dir, f"detected_f{frame_count:05d}_raw.jpg")
                 ann_path = os.path.join(out_dir, f"detected_f{frame_count:05d}_ann.jpg")
                 cv2.imwrite(raw_path, frame)
-                cv2.imwrite(ann_path, annotate_frame(frame.copy(), detections, max_conf))
-                rows.append({
-                    "video": video_stem,
-                    "frame": frame_count,
-                    "type": "detected",
-                    "conf": f"{max_conf:.2f}",
-                    "raw_path": raw_path,
-                    "ann_path": ann_path,
-                    "ground_truth": "",
-                })
+                cv2.imwrite(
+                    ann_path, annotate_frame(frame.copy(), detections, max_conf)
+                )
+                rows.append(
+                    {
+                        "video": video_stem,
+                        "frame": frame_count,
+                        "type": "detected",
+                        "conf": f"{max_conf:.2f}",
+                        "raw_path": raw_path,
+                        "ann_path": ann_path,
+                        "ground_truth": "",
+                    }
+                )
 
             elif not detections and frame_count % SAMPLE_EVERY == 0:
                 # Sample non-detected frames so user can spot false negatives
                 raw_path = os.path.join(out_dir, f"sample_f{frame_count:05d}.jpg")
                 cv2.imwrite(raw_path, frame)
-                rows.append({
-                    "video": video_stem,
-                    "frame": frame_count,
-                    "type": "sample",
-                    "conf": "0.00",
-                    "raw_path": raw_path,
-                    "ann_path": "",
-                    "ground_truth": "",
-                })
+                rows.append(
+                    {
+                        "video": video_stem,
+                        "frame": frame_count,
+                        "type": "sample",
+                        "conf": "0.00",
+                        "raw_path": raw_path,
+                        "ann_path": "",
+                        "ground_truth": "",
+                    }
+                )
 
         cap.release()
-        print(f"[INFO] {video_stem}: {frame_count} frames, {detected_count} detections saved")
+        print(
+            f"[INFO] {video_stem}: {frame_count} frames, {detected_count} detections saved"
+        )
 
     return rows
 
@@ -120,7 +128,15 @@ def write_labels_csv(rows):
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(
             f,
-            fieldnames=["video", "frame", "type", "conf", "raw_path", "ann_path", "ground_truth"],
+            fieldnames=[
+                "video",
+                "frame",
+                "type",
+                "conf",
+                "raw_path",
+                "ann_path",
+                "ground_truth",
+            ],
         )
         writer.writeheader()
         writer.writerows(rows)
@@ -147,8 +163,12 @@ def label_interactive():
         print("[INFO] All frames already labeled. Run --score to see results.")
         return
 
-    print(f"[INFO] {len(unlabeled)} frames to label. Keys: y=hazard  n=not hazard  s=skip  q=quit")
-    print("[INFO] Detected frames show raw (left) + annotated (right). Sample frames show raw only.")
+    print(
+        f"[INFO] {len(unlabeled)} frames to label. Keys: y=hazard  n=not hazard  s=skip  q=quit"
+    )
+    print(
+        "[INFO] Detected frames show raw (left) + annotated (right). Sample frames show raw only."
+    )
 
     labeled_count = 0
 
@@ -172,10 +192,19 @@ def label_interactive():
             display = raw.copy()
 
         # Info overlay
-        label = f"{i+1}/{len(unlabeled)}  [{row['type']}]  video={row['video']}  f={row['frame']}  conf={row['conf']}"
-        cv2.putText(display, label, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-        cv2.putText(display, "y=hazard  n=not hazard  s=skip  q=quit", (10, 55),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
+        label = f"{i + 1}/{len(unlabeled)}  [{row['type']}]  video={row['video']}  f={row['frame']}  conf={row['conf']}"
+        cv2.putText(
+            display, label, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2
+        )
+        cv2.putText(
+            display,
+            "y=hazard  n=not hazard  s=skip  q=quit",
+            (10, 55),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (200, 200, 200),
+            1,
+        )
 
         cv2.imshow("Label Frames", display)
 
@@ -206,7 +235,15 @@ def _save_rows(csv_path, rows):
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(
             f,
-            fieldnames=["video", "frame", "type", "conf", "raw_path", "ann_path", "ground_truth"],
+            fieldnames=[
+                "video",
+                "frame",
+                "type",
+                "conf",
+                "raw_path",
+                "ann_path",
+                "ground_truth",
+            ],
         )
         writer.writeheader()
         writer.writerows(rows)
@@ -235,8 +272,12 @@ def score():
                 tn += 1 - gt
 
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-    recall    = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-    f1        = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    f1 = (
+        2 * precision * recall / (precision + recall)
+        if (precision + recall) > 0
+        else 0.0
+    )
 
     print("\n=== Evaluation Results ===")
     print(f"  True Positives  (correct detections):  {tp}")
@@ -246,8 +287,8 @@ def score():
     if unlabeled:
         print(f"  Unlabeled (skipped):                    {unlabeled}")
     print()
-    print(f"  Precision: {precision:.3f}  ({tp}/{tp+fp} detections were correct)")
-    print(f"  Recall:    {recall:.3f}  ({tp}/{tp+fn} actual hazards were caught)")
+    print(f"  Precision: {precision:.3f}  ({tp}/{tp + fp} detections were correct)")
+    print(f"  Recall:    {recall:.3f}  ({tp}/{tp + fn} actual hazards were caught)")
     print(f"  F1 Score:  {f1:.3f}")
     if unlabeled:
         print(f"\n  [WARN] {unlabeled} rows unlabeled — metrics may be incomplete")
@@ -258,11 +299,13 @@ def main():
         description="Evaluate pothole detector on all videos in dataset/"
     )
     parser.add_argument(
-        "--score", action="store_true",
+        "--score",
+        action="store_true",
         help="Compute precision/recall from filled-in labels.csv",
     )
     parser.add_argument(
-        "--label", action="store_true",
+        "--label",
+        action="store_true",
         help="Interactively label saved frames (y=hazard, n=not hazard, s=skip, q=quit)",
     )
     args = parser.parse_args()

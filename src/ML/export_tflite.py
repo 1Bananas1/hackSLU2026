@@ -34,9 +34,7 @@ def export() -> None:
     try:
         from ultralytics import YOLO
     except ImportError:
-        raise SystemExit(
-            "ultralytics is not installed. Run: pip install ultralytics"
-        )
+        raise SystemExit("ultralytics is not installed. Run: pip install ultralytics")
 
     if not MODEL_PATH.exists():
         raise FileNotFoundError(
