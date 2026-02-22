@@ -36,7 +36,8 @@ from ultralytics import YOLO
 # ---------------------------------------------------------------------------
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "best.pt")
 
-CONFIDENCE_THRESHOLD = 0.15  # min per-detection YOLO confidence to count
+CONFIDENCE_THRESHOLD = 0.15        # min per-detection YOLO confidence (normal)
+SILENT_CONFIDENCE_THRESHOLD = 0.99  # threshold when system audio is muted
 HAZARD_CLASSES = {  # all pavement distress types worth alerting on
     "pothole",
     "alligator cracking",
@@ -66,6 +67,40 @@ def load_model():
     model = YOLO(MODEL_PATH)
     print("[INFO] Model ready.")
     return model
+
+
+# ---------------------------------------------------------------------------
+# System volume / mute detection
+# ---------------------------------------------------------------------------
+def _get_volume_controller():
+    """
+    Return a pycaw IAudioEndpointVolume handle for the default speakers, or
+    None if pycaw is unavailable (non-Windows, not installed, etc.).
+    Called once at startup; the returned handle is reused on every poll.
+    """
+    try:
+        from ctypes import cast, POINTER
+        from comtypes import CLSCTX_ALL
+        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+
+        devices = AudioUtilities.GetSpeakers()
+        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+        return cast(interface, POINTER(IAudioEndpointVolume))
+    except Exception:
+        return None
+
+
+def _is_muted(volume_ctrl) -> bool:
+    """
+    Return True if the system default audio output is currently muted.
+    Falls back to False on any error so the detector keeps running normally.
+    """
+    if volume_ctrl is None:
+        return False
+    try:
+        return bool(volume_ctrl.GetMute())
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -292,6 +327,11 @@ def main():
     # --- Model loading ---
     model = load_model()
 
+    # --- Volume / mute detection setup ---
+    volume_ctrl = _get_volume_controller()
+    if volume_ctrl is None:
+        print("[WARN] System volume detection unavailable. Install pycaw for mute-aware thresholding.")
+
     source = args.webcam if args.webcam is not None else args.video
     cap = cv2.VideoCapture(source)
     if not cap.isOpened():
@@ -299,7 +339,11 @@ def main():
         sys.exit(1)
 
     show_window = not args.no_display
-    conf_threshold = args.threshold
+    # Apply mute-aware threshold from the very first frame
+    _muted_at_start = _is_muted(volume_ctrl)
+    conf_threshold = SILENT_CONFIDENCE_THRESHOLD if _muted_at_start else args.threshold
+    if _muted_at_start:
+        print("[INFO] System audio is muted — confidence threshold set to 0.99 (silent mode).")
     frame_skip = args.skip
     window_size = args.window
     debug = args.debug
@@ -338,6 +382,17 @@ def main():
                 continue
 
             processed_count += 1
+
+            # --- Mute-aware threshold: re-check every ~30 processed frames ---
+            if processed_count % 30 == 0:
+                muted = _is_muted(volume_ctrl)
+                new_threshold = SILENT_CONFIDENCE_THRESHOLD if muted else args.threshold
+                if new_threshold != conf_threshold:
+                    conf_threshold = new_threshold
+                    if muted:
+                        print("[INFO] System audio muted — threshold raised to 0.99 (silent mode).")
+                    else:
+                        print(f"[INFO] System audio unmuted — threshold restored to {args.threshold:.2f} (default).")
 
             # YOLO inference (native BGR frame — no conversion needed)
             max_conf, detections = run_inference(model, frame, conf_threshold)

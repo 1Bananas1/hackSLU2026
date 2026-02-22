@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -m compileall:*)"
+      "Bash(python -m compileall:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)"
     ]
   }
 }

@@ -16,3 +16,6 @@ pyaudio>=0.2.13        # microphone input for SpeechRecognition
 
 # Backend API client
 requests>=2.31.0
+
+# System volume / mute detection (Windows Core Audio API wrapper)
+pycaw>=0.6.0
