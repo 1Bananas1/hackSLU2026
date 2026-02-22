@@ -118,9 +118,9 @@ export function usePotholeDetector() {
   const [lastAlert, setLastAlert] = useState<AlertMetadata | null>(null);
 
   // ── Model ───────────────────────────────────────────────────────────────
-  // Use CoreML (Metal) on iOS for GPU-accelerated inference; GPU delegate
-  // on Android.  model.state is 'loading' | 'loaded' | 'error'.
-  const delegate = Platform.OS === 'ios' ? 'coreml' : 'gpu';
+  // Use CoreML (Metal) on iOS for GPU-accelerated inference; CPU on Android
+  // (GPU delegate crashes on emulators).  model.state is 'loading' | 'loaded' | 'error'.
+  const delegate = Platform.OS === 'ios' ? 'coreml' : 'default';
   const model = useTensorflowModel(
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('../assets/models/best.tflite'),

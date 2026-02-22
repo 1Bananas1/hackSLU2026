@@ -11,7 +11,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import * as Location from 'expo-location';
-
+import * as SecureStore from 'expo-secure-store';
+import { useIsFocused } from '@react-navigation/native';
 import { usePotholeDetector } from '@/hooks/usePotholeDetector';
 import { writeHazard } from '@/services/firestore';
 import { createHazard } from '@/services/api';
@@ -30,6 +31,7 @@ function mphFromMetersPerSecond(mps: number): number {
 }
 
 export default function VigilaneLiveDashboard() {
+  const isFocused = useIsFocused();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const bounceAnim = useRef(new Animated.Value(0)).current;
 
@@ -191,11 +193,12 @@ export default function VigilaneLiveDashboard() {
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       <Toast {...toast} />
 
+
       {hasPermission && device != null ? (
         <Camera
           style={StyleSheet.absoluteFill}
           device={device}
-          isActive
+          isActive={isFocused}
           frameProcessor={frameProcessor}
           pixelFormat="yuv"
         />
