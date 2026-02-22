@@ -51,7 +51,9 @@ export default function LoginScreen() {
   // run:android) whose debug keystore SHA-1 is registered in Google Cloud
   // Console. This will NOT work inside Expo Go (exp:// redirect is rejected).
   const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
-  const hasValidClientIds = iosClientId && iosClientId !== 'placeholder';
+  // Web uses signInWithPopup — no native client IDs needed.
+  const hasValidClientIds =
+    Platform.OS === 'web' || (!!iosClientId && iosClientId !== 'placeholder');
   
   const [, response, promptAsync] = Google.useAuthRequest({
     webClientId:     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '',
