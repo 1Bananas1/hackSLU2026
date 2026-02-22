@@ -12,16 +12,35 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import * as Location from 'expo-location';
+import * as SecureStore from 'expo-secure-store';
 
 import { usePotholeDetector } from '@/hooks/usePotholeDetector';
 import { writeHazard } from '@/services/firestore';
 import { createSession, endSession, createHazard, getSessionHazards } from '@/services/api';
-import { getOrCreateDeviceId } from '@/services/deviceId';
 import type { Hazard, Session } from '@/types';
 import { Toast, useToast } from '@/components/toast';
 
 const POLL_INTERVAL_MS = 3000;
 const USE_BACKEND_POLLING = (process.env.EXPO_PUBLIC_USE_BACKEND_POLLING ?? 'false') === 'true';
+
+const DEVICE_ID_KEY = 'vigilane_device_id_v1';
+
+function randomId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function getOrCreateDeviceId(prefix: string): Promise<string> {
+  try {
+    const existing = await SecureStore.getItemAsync(DEVICE_ID_KEY);
+    if (existing) return existing;
+
+    const created = `${prefix}-${randomId()}`;
+    await SecureStore.setItemAsync(DEVICE_ID_KEY, created);
+    return created;
+  } catch {
+    return `${prefix}-${randomId()}`;
+  }
+}
 
 function formatElapsed(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -45,7 +64,6 @@ export default function VigilaneLiveDashboard() {
   const [sessionLoading, setSessionLoading] = useState(false);
   const { toast, showToast } = useToast();
 
-  // stable per-install device id (secure-store). computed once.
   const [deviceId, setDeviceId] = useState<string | null>(null);
 
   // ── Camera ────────────────────────────────────────────────────────────────
@@ -166,14 +184,13 @@ export default function VigilaneLiveDashboard() {
     }
   };
 
-  // Optional backend polling: keeps API useful and supports hybrid architecture.
+  // Optional backend polling: keeps API endpoint relevant for hybrid mode.
   const pollHazards = useCallback(async () => {
     if (!session) return;
     try {
       const hazards = await getSessionHazards(session.id);
       if (!hazards || hazards.length === 0) return;
 
-      // assume API returns hazards ascending by timestamp (as documented)
       const newest = hazards[hazards.length - 1];
       setLatestHazard((prev) => {
         if (!prev) return newest;
@@ -183,7 +200,7 @@ export default function VigilaneLiveDashboard() {
         return newTs > prevTs ? newest : prev;
       });
     } catch {
-      // polling failures must not affect UX
+      // ignore
     }
   }, [session]);
 
@@ -212,7 +229,6 @@ export default function VigilaneLiveDashboard() {
 
     setLatestHazard(localHazard);
 
-    // Fire-and-forget persistence — detection must never block on I/O.
     void writeHazard(session.id, {
       confidence: lastAlert.confidence,
       bboxes: lastAlert.bboxes,
@@ -261,10 +277,8 @@ export default function VigilaneLiveDashboard() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-
       <Toast {...toast} />
 
-      {/* ── Live camera feed ─────────────────────────────────────────────── */}
       {hasPermission && device != null ? (
         <Camera
           style={StyleSheet.absoluteFill}
@@ -286,7 +300,6 @@ export default function VigilaneLiveDashboard() {
       )}
 
       <SafeAreaView style={styles.safeArea}>
-        {/* ── Top bar ── */}
         <View style={styles.topBar}>
           <View style={styles.glassPanel}>
             <MaterialIcons name="verified-user" size={20} color={session ? '#34d399' : '#94a3b8'} />
@@ -308,13 +321,12 @@ export default function VigilaneLiveDashboard() {
           </View>
         </View>
 
-        {/* Speed widget (restored) */}
+        {/* Speed widget */}
         <View style={styles.speedWidget}>
           <MaterialIcons name="speed" size={18} color="#e2e8f0" />
           <Text style={styles.speedText}>{speedLabel}</Text>
         </View>
 
-        {/* ── AR bounding-box overlays — drawn from live detections ── */}
         {showAlert && latestHazard && latestHazard.bboxes.length > 0 && (
           <View style={styles.arLayer}>
             {latestHazard.bboxes.map((bbox, i) => (
@@ -344,7 +356,6 @@ export default function VigilaneLiveDashboard() {
 
         <View style={styles.flexSpacer} />
 
-        {/* ── Bottom dashboard ── */}
         <View style={styles.bottomOverlay}>
           {alertLabel && (
             <Animated.View style={[styles.alertBannerContainer, { transform: [{ translateY: bounceAnim }] }]}>
