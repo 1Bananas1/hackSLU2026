@@ -29,7 +29,6 @@ class Hazard:
     labels: List[str] = field(default_factory=list)
     bboxes: List[Dict] = field(default_factory=list)
     frame_number: int = 0
-    # event_type is optional — defaults to labels[0] when not supplied
     event_type: str = ""
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     photo_url: Optional[str] = None

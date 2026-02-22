@@ -1,0 +1,64 @@
+diff --git a/node_modules/vision-camera-resize-plugin/android/src/main/java/com/visioncameraresizeplugin/ResizePlugin.kt b/node_modules/vision-camera-resize-plugin/android/src/main/java/com/visioncameraresizeplugin/ResizePlugin.kt
+index 8c8c0c5..16a440a 100644
+--- a/node_modules/vision-camera-resize-plugin/android/src/main/java/com/visioncameraresizeplugin/ResizePlugin.kt
++++ b/node_modules/vision-camera-resize-plugin/android/src/main/java/com/visioncameraresizeplugin/ResizePlugin.kt
+@@ -6,10 +6,10 @@ import android.util.Log
+ import androidx.annotation.Keep
+ import com.facebook.jni.HybridData
+ import com.facebook.jni.annotations.DoNotStrip
+-import com.mrousavy.camera.frameprocessor.Frame
+-import com.mrousavy.camera.frameprocessor.FrameProcessorPlugin
+-import com.mrousavy.camera.frameprocessor.SharedArray
+-import com.mrousavy.camera.frameprocessor.VisionCameraProxy
++import com.mrousavy.camera.frameprocessors.Frame
++import com.mrousavy.camera.frameprocessors.FrameProcessorPlugin
++import com.mrousavy.camera.frameprocessors.SharedArray
++import com.mrousavy.camera.frameprocessors.VisionCameraProxy
+ import java.nio.ByteBuffer
+ 
+ @Suppress("KotlinJniMissingFunction") // We're using fbjni
+diff --git a/node_modules/vision-camera-resize-plugin/android/src/main/java/com/visioncameraresizeplugin/VisionCameraResizePluginPackage.kt b/node_modules/vision-camera-resize-plugin/android/src/main/java/com/visioncameraresizeplugin/VisionCameraResizePluginPackage.kt
+index 7174bbe..a0147ab 100644
+--- a/node_modules/vision-camera-resize-plugin/android/src/main/java/com/visioncameraresizeplugin/VisionCameraResizePluginPackage.kt
++++ b/node_modules/vision-camera-resize-plugin/android/src/main/java/com/visioncameraresizeplugin/VisionCameraResizePluginPackage.kt
+@@ -5,7 +5,7 @@ import com.facebook.react.bridge.NativeModule
+ import com.facebook.react.bridge.ReactApplicationContext
+ import com.facebook.react.module.model.ReactModuleInfo
+ import com.facebook.react.module.model.ReactModuleInfoProvider
+-import com.mrousavy.camera.frameprocessor.FrameProcessorPluginRegistry
++import com.mrousavy.camera.frameprocessors.FrameProcessorPluginRegistry
+ 
+ class VisionCameraResizePluginPackage : TurboReactPackage() {
+   companion object {
+diff --git a/node_modules/vision-camera-resize-plugin/android/src/main/java/com/visioncameraresizeplugin/ResizePlugin.kt b/node_modules/vision-camera-resize-plugin/android/src/main/java/com/visioncameraresizeplugin/ResizePlugin.kt
+index 8c8c0c5..16a440a 100644
+--- a/node_modules/vision-camera-resize-plugin/android/src/main/java/com/visioncameraresizeplugin/ResizePlugin.kt
++++ b/node_modules/vision-camera-resize-plugin/android/src/main/java/com/visioncameraresizeplugin/ResizePlugin.kt
+@@ -6,10 +6,10 @@ import android.util.Log
+ import androidx.annotation.Keep
+ import com.facebook.jni.HybridData
+ import com.facebook.jni.annotations.DoNotStrip
+-import com.mrousavy.camera.frameprocessor.Frame
+-import com.mrousavy.camera.frameprocessor.FrameProcessorPlugin
+-import com.mrousavy.camera.frameprocessor.SharedArray
+-import com.mrousavy.camera.frameprocessor.VisionCameraProxy
++import com.mrousavy.camera.frameprocessors.Frame
++import com.mrousavy.camera.frameprocessors.FrameProcessorPlugin
++import com.mrousavy.camera.frameprocessors.SharedArray
++import com.mrousavy.camera.frameprocessors.VisionCameraProxy
+ import java.nio.ByteBuffer
+ 
+ @Suppress("KotlinJniMissingFunction") // We're using fbjni
+diff --git a/node_modules/vision-camera-resize-plugin/android/src/main/java/com/visioncameraresizeplugin/VisionCameraResizePluginPackage.kt b/node_modules/vision-camera-resize-plugin/android/src/main/java/com/visioncameraresizeplugin/VisionCameraResizePluginPackage.kt
+index 7174bbe..a0147ab 100644
+--- a/node_modules/vision-camera-resize-plugin/android/src/main/java/com/visioncameraresizeplugin/VisionCameraResizePluginPackage.kt
++++ b/node_modules/vision-camera-resize-plugin/android/src/main/java/com/visioncameraresizeplugin/VisionCameraResizePluginPackage.kt
+@@ -5,7 +5,7 @@ import com.facebook.react.bridge.NativeModule
+ import com.facebook.react.bridge.ReactApplicationContext
+ import com.facebook.react.module.model.ReactModuleInfo
+ import com.facebook.react.module.model.ReactModuleInfoProvider
+-import com.mrousavy.camera.frameprocessor.FrameProcessorPluginRegistry
++import com.mrousavy.camera.frameprocessors.FrameProcessorPluginRegistry
+ 
+ class VisionCameraResizePluginPackage : TurboReactPackage() {
+   companion object {
