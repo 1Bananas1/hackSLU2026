@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,8 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { getHazards } from '../../services/api';
 import { Hazard } from '../../types';
 
@@ -41,12 +40,18 @@ const colors = {
 function getLabelMeta(labels: string[]): { icon: string; iconBg: string } {
   const label = labels[0] ?? '';
   switch (label) {
-    case 'pothole':    return { icon: 'grid-on',     iconBg: '#f97316' };
-    case 'crack':      return { icon: 'grid-on',     iconBg: '#f97316' };
-    case 'accident':   return { icon: 'car-crash',   iconBg: '#ef4444' };
-    case 'debris':     return { icon: 'warning',     iconBg: '#64748b' };
-    case 'construction': return { icon: 'construction', iconBg: '#3b82f6' };
-    default:           return { icon: 'report-problem', iconBg: '#94a3b8' };
+    case 'pothole':
+      return { icon: 'grid-on', iconBg: '#f97316' };
+    case 'crack':
+      return { icon: 'grid-on', iconBg: '#f97316' };
+    case 'accident':
+      return { icon: 'car-crash', iconBg: '#ef4444' };
+    case 'debris':
+      return { icon: 'warning', iconBg: '#64748b' };
+    case 'construction':
+      return { icon: 'construction', iconBg: '#3b82f6' };
+    default:
+      return { icon: 'report-problem', iconBg: '#94a3b8' };
   }
 }
 
@@ -70,19 +75,40 @@ function formatTime(isoTimestamp: string): string {
 function getStatusStyle(status?: string) {
   switch (status) {
     case 'reported':
-      return { bg: 'rgba(34, 197, 94, 0.1)', text: '#4ade80', dot: '#22c55e', border: 'rgba(34, 197, 94, 0.2)' };
+      return {
+        bg: 'rgba(34, 197, 94, 0.1)',
+        text: '#4ade80',
+        dot: '#22c55e',
+        border: 'rgba(34, 197, 94, 0.2)',
+      };
     case 'pending':
-      return { bg: 'rgba(234, 179, 8, 0.1)', text: '#facc15', dot: '#eab308', border: 'rgba(234, 179, 8, 0.2)' };
+      return {
+        bg: 'rgba(234, 179, 8, 0.1)',
+        text: '#facc15',
+        dot: '#eab308',
+        border: 'rgba(234, 179, 8, 0.2)',
+      };
     case 'dismissed':
-      return { bg: 'rgba(100, 116, 139, 0.3)', text: '#94a3b8', dot: '#94a3b8', border: 'rgba(100, 116, 139, 0.4)' };
+      return {
+        bg: 'rgba(100, 116, 139, 0.3)',
+        text: '#94a3b8',
+        dot: '#94a3b8',
+        border: 'rgba(100, 116, 139, 0.4)',
+      };
     default:
-      return { bg: 'rgba(100, 116, 139, 0.3)', text: '#94a3b8', dot: '#94a3b8', border: 'rgba(100, 116, 139, 0.4)' };
+      return {
+        bg: 'rgba(100, 116, 139, 0.3)',
+        text: '#94a3b8',
+        dot: '#94a3b8',
+        border: 'rgba(100, 116, 139, 0.4)',
+      };
   }
 }
 
 function matchesFilter(hazard: Hazard, filter: Filter): boolean {
   if (filter === 'All') return true;
   if (filter === 'Reported') return hazard.status === 'reported';
+
   const labelMap: Record<string, string> = {
     Potholes: 'pothole',
     Accidents: 'accident',
@@ -116,11 +142,10 @@ export default function ReportHistory() {
     }
   }, []);
 
-  // Refetch every time screen gains focus (e.g. after deleting a hazard)
   useFocusEffect(
     useCallback(() => {
-      fetchHazards();
-    }, [fetchHazards])
+      void fetchHazards();
+    }, [fetchHazards]),
   );
 
   const filteredHazards = useMemo(
@@ -132,19 +157,25 @@ export default function ReportHistory() {
     const showHeader =
       index === 0 ||
       getDateGroup(filteredHazards[index - 1].timestamp) !== getDateGroup(item.timestamp);
+
     const statusStyle = getStatusStyle(item.status);
     const { icon, iconBg } = getLabelMeta(item.labels);
-    const label = (item.labels[0] ?? 'unknown').charAt(0).toUpperCase() + (item.labels[0] ?? 'unknown').slice(1);
+    const label =
+      (item.labels[0] ?? 'unknown').charAt(0).toUpperCase() +
+      (item.labels[0] ?? 'unknown').slice(1);
 
     return (
       <View>
         {showHeader && (
           <Text style={styles.dateHeader}>{getDateGroup(item.timestamp).toUpperCase()}</Text>
         )}
+
         <TouchableOpacity
           style={styles.card}
           activeOpacity={0.8}
-          onPress={() => router.push({ pathname: '/hazardDetails', params: { id: item.id } })}
+          onPress={() =>
+            router.push({ pathname: '/hazardDetails', params: { id: item.id } })
+          }
         >
           <View style={styles.thumbnailContainer}>
             <ImageBackground
@@ -160,16 +191,26 @@ export default function ReportHistory() {
 
           <View style={styles.cardContent}>
             <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle} numberOfLines={1}>{label}</Text>
+              <Text style={styles.cardTitle} numberOfLines={1}>
+                {label}
+              </Text>
               <Text style={styles.cardTime}>{formatTime(item.timestamp)}</Text>
             </View>
+
             <Text style={styles.cardDescription} numberOfLines={1}>
               {`${Math.round(item.confidence * 100)}% confidence • Frame ${item.frame_number}`}
             </Text>
-            <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg, borderColor: statusStyle.border }]}>
+
+            <View
+              style={[
+                styles.statusBadge,
+                { backgroundColor: statusStyle.bg, borderColor: statusStyle.border },
+              ]}
+            >
               <View style={[styles.statusDot, { backgroundColor: statusStyle.dot }]} />
               <Text style={[styles.statusText, { color: statusStyle.text }]}>
-                {(item.status ?? 'pending').charAt(0).toUpperCase() + (item.status ?? 'pending').slice(1)}
+                {(item.status ?? 'pending').charAt(0).toUpperCase() +
+                  (item.status ?? 'pending').slice(1)}
               </Text>
             </View>
           </View>
@@ -187,9 +228,17 @@ export default function ReportHistory() {
       </View>
 
       <View style={styles.searchContainer}>
-        <MaterialIcons name="search" size={20} color={colors.textSecondary} style={styles.searchIcon} />
+        <MaterialIcons
+          name="search"
+          size={20}
+          color={colors.textSecondary}
+          style={styles.searchIcon}
+        />
         <TextInput
-          style={[styles.searchInput, { backgroundColor: colors.surface, color: colors.textPrimary }]}
+          style={[
+            styles.searchInput,
+            { backgroundColor: colors.surface, color: colors.textPrimary },
+          ]}
           placeholder="Search hazards..."
           placeholderTextColor={colors.textSecondary}
         />
@@ -214,7 +263,12 @@ export default function ReportHistory() {
                 ]}
                 onPress={() => setActiveFilter(filter)}
               >
-                <Text style={[styles.filterText, isActive ? styles.filterTextActive : { color: '#cbd5e1' }]}>
+                <Text
+                  style={[
+                    styles.filterText,
+                    isActive ? styles.filterTextActive : { color: '#cbd5e1' },
+                  ]}
+                >
                   {filter}
                 </Text>
               </TouchableOpacity>

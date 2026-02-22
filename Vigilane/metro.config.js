@@ -1,10 +1,12 @@
-// https://docs.expo.dev/guides/customizing-metro/
 const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
-// Firebase v9+ uses package.json `exports` fields for its subpath modules
-// (firebase/app, firebase/auth, etc.). Metro needs this flag to honour them.
+// Allow Metro to bundle .tflite model files as static assets.
+config.resolver.assetExts.push('tflite');
+
+// Firebase / modern package export maps support.
+// This prevents subtle runtime failures with subpath imports depending on versions.
 config.resolver.unstable_enablePackageExports = true;
 
 module.exports = config;

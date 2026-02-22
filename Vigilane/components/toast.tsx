@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Animated, StyleSheet, Text } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
 // ---------------------------------------------------------------------------
@@ -22,8 +22,8 @@ const ICONS: Record<ToastType, string> = {
 
 const BG_COLORS: Record<ToastType, string> = {
   success: '#16a34a',
-  error:   '#dc2626',
-  info:    '#1973f0',
+  error: '#dc2626',
+  info: '#1973f0',
 };
 
 // ---------------------------------------------------------------------------
@@ -41,13 +41,19 @@ export function useToast() {
 
   const showToast = useCallback((message: string, type: ToastType = 'success') => {
     if (timerRef.current) clearTimeout(timerRef.current);
+
     setToast({ message, type, visible: true });
+
     timerRef.current = setTimeout(() => {
       setToast((prev) => ({ ...prev, visible: false }));
     }, 2800);
   }, []);
 
-  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   return { toast, showToast };
 }
@@ -69,7 +75,9 @@ export function Toast({ message, type, visible }: ToastState) {
     } else {
       opacity.setValue(0);
     }
-  }, [visible, message]);
+  }, [visible, opacity]);
+
+  if (!message) return null;
 
   return (
     <Animated.View

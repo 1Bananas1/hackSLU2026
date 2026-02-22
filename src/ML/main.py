@@ -36,8 +36,8 @@ from ultralytics import YOLO
 # ---------------------------------------------------------------------------
 MODEL_PATH = "src/ML/best.pt"
 
-CONFIDENCE_THRESHOLD = 0.12   # min per-detection YOLO confidence to count
-HAZARD_CLASSES = {            # all pavement distress types worth alerting on
+CONFIDENCE_THRESHOLD = 0.12  # min per-detection YOLO confidence to count
+HAZARD_CLASSES = {  # all pavement distress types worth alerting on
     "pothole",
     "alligator cracking",
     "longitudinal cracking",
@@ -45,12 +45,16 @@ HAZARD_CLASSES = {            # all pavement distress types worth alerting on
     "rutting",
     "patching",
 }
-ROI_TOP_FRACTION = 0.55       # ignore detections in the top N% of frame (sky/horizon can't be potholes)
-ROI_BOTTOM_FRACTION = 0.88    # ignore detections below this point (car hood reflections)
-FRAME_SKIP = 1                 # run inference every frame (damage passes fast at highway speeds)
-WINDOW_SIZE = 3                # rolling window for smoothing (processed frames)
-SMOOTHED_THRESHOLD = 0.34      # fraction of window frames with a detection to alert (1/3 frames)
-ALERT_COOLDOWN = 30            # min frames between printed alerts
+ROI_TOP_FRACTION = (
+    0.55  # ignore detections in the top N% of frame (sky/horizon can't be potholes)
+)
+ROI_BOTTOM_FRACTION = 0.88  # ignore detections below this point (car hood reflections)
+FRAME_SKIP = 1  # run inference every frame (damage passes fast at highway speeds)
+WINDOW_SIZE = 3  # rolling window for smoothing (processed frames)
+SMOOTHED_THRESHOLD = (
+    0.34  # fraction of window frames with a detection to alert (1/3 frames)
+)
+ALERT_COOLDOWN = 30  # min frames between printed alerts
 OUTPUT_DIR = "dataset/output"  # where to save detection snapshots
 
 
@@ -86,6 +90,7 @@ def run_inference(model, frame, conf_threshold):
     names = results[0].names
 
     import os as _os
+
     if _os.environ.get("YOLO_RAW_DEBUG"):
         for c, b, cls_id in zip(confs, xyxy, cls_ids):
             print(f"  RAW: {names[cls_id]} conf={float(c):.2f} y1={b[1]:.0f}")
@@ -126,12 +131,22 @@ def annotate_frame(frame, detections, max_conf):
         x1, y1, x2, y2 = (int(v) for v in det["bbox"])
         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
         cv2.putText(
-            frame, f"{det['conf']:.2f}", (x1, max(y1 - 8, 0)),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2,
+            frame,
+            f"{det['conf']:.2f}",
+            (x1, max(y1 - 8, 0)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 0, 255),
+            2,
         )
     cv2.putText(
-        frame, f"Max conf: {max_conf:.2f}", (10, 30),
-        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2,
+        frame,
+        f"Max conf: {max_conf:.2f}",
+        (10, 30),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1.0,
+        (0, 255, 0),
+        2,
     )
     return frame
 
@@ -140,72 +155,95 @@ def annotate_frame(frame, detections, max_conf):
 # CLI
 # ---------------------------------------------------------------------------
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Live pothole detection using YOLOv8"
-    )
+    parser = argparse.ArgumentParser(description="Live pothole detection using YOLOv8")
     source_group = parser.add_mutually_exclusive_group(required=True)
     source_group.add_argument(
-        "--webcam", type=int, metavar="INDEX",
+        "--webcam",
+        type=int,
+        metavar="INDEX",
         help="Webcam device index (e.g. 0 for default camera)",
     )
     source_group.add_argument(
-        "--video", type=str, metavar="PATH",
+        "--video",
+        type=str,
+        metavar="PATH",
         help="Path to a video file (e.g. dashcam.mp4)",
     )
     parser.add_argument(
-        "--no-display", action="store_true",
+        "--no-display",
+        action="store_true",
         help="Disable the cv2 video window (headless/console-only mode)",
     )
     parser.add_argument(
-        "--threshold", type=float, default=CONFIDENCE_THRESHOLD,
+        "--threshold",
+        type=float,
+        default=CONFIDENCE_THRESHOLD,
         help=f"Per-detection YOLO confidence threshold 0-1 (default: {CONFIDENCE_THRESHOLD})",
     )
     parser.add_argument(
-        "--skip", type=int, default=FRAME_SKIP,
+        "--skip",
+        type=int,
+        default=FRAME_SKIP,
         help=f"Run inference every Nth frame (default: {FRAME_SKIP})",
     )
     parser.add_argument(
-        "--window", type=int, default=WINDOW_SIZE,
+        "--window",
+        type=int,
+        default=WINDOW_SIZE,
         help=f"Smoothing window size in processed frames (default: {WINDOW_SIZE})",
     )
     parser.add_argument(
-        "--debug", action="store_true",
+        "--debug",
+        action="store_true",
         help="Print raw YOLO detections for every processed frame",
     )
 
     # --- Voice confirmation options ---
     parser.add_argument(
-        "--no-voice", action="store_true",
+        "--no-voice",
+        action="store_true",
         help="Disable voice confirmation (detections are only logged, not confirmed by voice)",
     )
     parser.add_argument(
-        "--fallback", choices=["discard", "keep"], default="discard",
+        "--fallback",
+        choices=["discard", "keep"],
+        default="discard",
         help="What to do when the driver gives no clear response after reprompt "
-             "(default: discard)",
+        "(default: discard)",
     )
 
     # --- Backend API options ---
     parser.add_argument(
-        "--api-url", type=str, default=None, metavar="URL",
+        "--api-url",
+        type=str,
+        default=None,
+        metavar="URL",
         help="Base URL of the Vigilane Flask backend (e.g. http://127.0.0.1:5000). "
-             "If omitted, confirmed detections are logged locally only.",
+        "If omitted, confirmed detections are logged locally only.",
     )
     parser.add_argument(
-        "--auth-token", type=str, default=None, metavar="TOKEN",
+        "--auth-token",
+        type=str,
+        default=None,
+        metavar="TOKEN",
         help="Firebase ID token for API authentication. "
-             "Can also be set via the VIGILANE_AUTH_TOKEN env variable.",
+        "Can also be set via the VIGILANE_AUTH_TOKEN env variable.",
     )
     parser.add_argument(
-        "--device-id", type=str, default=None, metavar="ID",
+        "--device-id",
+        type=str,
+        default=None,
+        metavar="ID",
         help="Identifier for this camera/device sent when creating a session "
-             "(default: webcam_<INDEX> or the video filename).",
+        "(default: webcam_<INDEX> or the video filename).",
     )
     parser.add_argument(
-        "--auto-confirm", action="store_true",
+        "--auto-confirm",
+        action="store_true",
         help="When used together with --no-voice, automatically confirm every "
-             "detection and post it to the backend without asking the driver. "
-             "Has no effect when voice confirmation is active. "
-             "Intended for fully automated/headless deployments only.",
+        "detection and post it to the backend without asking the driver. "
+        "Has no effect when voice confirmation is active. "
+        "Intended for fully automated/headless deployments only.",
     )
 
     return parser.parse_args()
@@ -222,6 +260,7 @@ def main():
     if not args.no_voice:
         try:
             from voice_confirmation import VoiceConfirmationHandler
+
             voice_handler = VoiceConfirmationHandler(fallback=args.fallback)
             print("[INFO] Voice confirmation enabled.")
         except ImportError as exc:
@@ -238,6 +277,7 @@ def main():
     if args.api_url:
         try:
             from api_client import HazardApiClient
+
             api_client = HazardApiClient(
                 base_url=args.api_url,
                 auth_token=args.auth_token,
@@ -253,8 +293,10 @@ def main():
             if session_id:
                 print(f"[INFO] Session started: {session_id}")
             else:
-                print("[WARN] Could not create a backend session. "
-                      "Confirmed hazards will be logged locally only.")
+                print(
+                    "[WARN] Could not create a backend session. "
+                    "Confirmed hazards will be logged locally only."
+                )
         except ImportError as exc:
             print(
                 f"[WARN] API client unavailable (missing dependency): {exc}. "
@@ -264,7 +306,7 @@ def main():
             print(f"[WARN] API client setup failed: {exc}")
 
     # --- Model loading ---
-    model, processor, device, dtype = load_model()
+    model = load_model()
 
     source = args.webcam if args.webcam is not None else args.video
     cap = cv2.VideoCapture(source)
@@ -277,6 +319,8 @@ def main():
     frame_skip = args.skip
     window_size = args.window
     debug = args.debug
+    if debug:
+        os.environ["YOLO_RAW_DEBUG"] = "1"
 
     # Rolling window: 1 = pothole detected this frame, 0 = not detected
     detection_window = deque(maxlen=window_size)
@@ -284,7 +328,9 @@ def main():
     processed_count = 0
     last_alert_frame = -ALERT_COOLDOWN
 
-    print(f"[INFO] Starting (skip={frame_skip}, window={window_size}, threshold={conf_threshold}).")
+    print(
+        f"[INFO] Starting (skip={frame_skip}, window={window_size}, threshold={conf_threshold})."
+    )
     if show_window:
         print("[INFO] Press 'q' to quit.")
     else:
@@ -321,12 +367,12 @@ def main():
                 current_confidence = sum(detection_window) / window_size
 
                 if (
-                    current_confidence >= threshold
-                    and (processed_count - last_alert_processed) >= ALERT_COOLDOWN
+                    current_confidence >= SMOOTHED_THRESHOLD
+                    and (processed_count - last_alert_frame) >= ALERT_COOLDOWN
                 ):
                     # Log the raw detection
-                    trigger_alert(current_confidence, bboxes, frame_count)
-                    last_alert_processed = processed_count
+                    trigger_alert(current_confidence, detections, frame_count)
+                    last_alert_frame = processed_count
 
                     # -------------------------------------------------------
                     # Voice confirmation flow
@@ -352,7 +398,9 @@ def main():
                                 confidence=current_confidence,
                             )
                         else:
-                            print("[INFO] (No API configured — detection logged locally only.)")
+                            print(
+                                "[INFO] (No API configured — detection logged locally only.)"
+                            )
                     else:
                         print("[INFO] Detection DISCARDED by user.")
 
@@ -364,10 +412,15 @@ def main():
             if show_window:
                 if detections:
                     frame = annotate_frame(frame, detections, max_conf)
-                elif smoothed > 0:
+                elif current_confidence > 0:
                     cv2.putText(
-                        frame, f"Smoothed: {smoothed:.2f}", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 200, 0), 2,
+                        frame,
+                        f"Smoothed: {current_confidence:.2f}",
+                        (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1.0,
+                        (0, 200, 0),
+                        2,
                     )
                 cv2.imshow("Pothole Detector", frame)
                 if cv2.waitKey(1) & 0xFF == ord("q"):

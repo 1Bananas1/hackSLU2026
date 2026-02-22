@@ -9,7 +9,8 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vigilane.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -39,6 +40,20 @@
     },
     "plugins": [
       "expo-router",
+      "expo-dev-client",
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "Vigilane uses the camera to detect road damage in real time.",
+          "enableMicrophonePermission": false
+        }
+      ],
+      [
+        "react-native-fast-tflite",
+        {
+          "enableCoreMLDelegate": true
+        }
+      ],
       [
         "expo-splash-screen",
         {

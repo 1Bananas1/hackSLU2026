@@ -13,7 +13,10 @@ export const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? defaultBaseUrl;
 // Auth token
 // ---------------------------------------------------------------------------
 
-/** Returns the Firebase ID token for the current user, or '' if not signed in. */
+/**
+ * Returns the Firebase ID token for the current user, or '' if not signed in.
+ * The token is automatically refreshed by the Firebase SDK when it expires.
+ */
 async function getAuthToken(): Promise<string> {
   return (await auth.currentUser?.getIdToken()) ?? '';
 }

@@ -27,7 +27,7 @@ from typing import Optional
 class Report:
     hazard_id: str
     submitted_by_uid: str
-    reporter_name_enc: str   # Fernet ciphertext
+    reporter_name_enc: str  # Fernet ciphertext
     reporter_email_enc: str  # Fernet ciphertext
     submitted_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     status: str = "submitted"  # "submitted" | "acknowledged" | "resolved"

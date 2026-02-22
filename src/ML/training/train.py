@@ -18,22 +18,25 @@ Output: runs/detect/pothole_finetune/weights/best.pt
 # ---------------------------------------------------------------------------
 import os
 from dotenv import load_dotenv
+
 load_dotenv()  # loads .env from cwd or any parent directory
 
-ROBOFLOW_API_KEY = os.environ["ROBOFLOW_API_KEY"]   # set in .env
+ROBOFLOW_API_KEY = os.environ["ROBOFLOW_API_KEY"]  # set in .env
 ROBOFLOW_WORKSPACE = "major-project-ye1u4"
-ROBOFLOW_PROJECT   = "pavement-distress-analysis-siokj"
-ROBOFLOW_VERSION   = 1   # bump this if Roboflow shows a higher version on the dataset page
+ROBOFLOW_PROJECT = "pavement-distress-analysis-siokj"
+ROBOFLOW_VERSION = 1  # bump this if Roboflow shows a higher version on the dataset page
 
 # ---------------------------------------------------------------------------
 # Training settings — tuned for RTX 4070 Ti (12 GB VRAM)
 # ---------------------------------------------------------------------------
-BASE_MODEL  = "yolov8m.pt"   # medium — much better accuracy than nano, fits easily in 12 GB
-EPOCHS      = 20
-IMAGE_SIZE  = 640
-BATCH_SIZE  = 32             # 4070 Ti handles 32 comfortably; try 64 if VRAM allows
-DEVICE      = 0              # GPU index — 0 = first GPU (your 4070 Ti)
-RUN_NAME    = "pothole_finetune"
+BASE_MODEL = (
+    "yolov8m.pt"  # medium — much better accuracy than nano, fits easily in 12 GB
+)
+EPOCHS = 20
+IMAGE_SIZE = 640
+BATCH_SIZE = 32  # 4070 Ti handles 32 comfortably; try 64 if VRAM allows
+DEVICE = 0  # GPU index — 0 = first GPU (your 4070 Ti)
+RUN_NAME = "pothole_finetune"
 
 # ---------------------------------------------------------------------------
 # Download dataset + train

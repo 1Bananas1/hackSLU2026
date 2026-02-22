@@ -11,8 +11,8 @@ Typical usage from the Flask backend:
 
     hazard = Hazard(
         session_id=session_id,
-        event_type="pothole",
         confidence=0.85,
+        labels=["pothole"],
         photo_url="https://storage.googleapis.com/...",
         location={"lat": 38.627, "lng": -90.199},
     )

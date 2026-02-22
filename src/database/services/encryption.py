@@ -15,18 +15,36 @@ Usage:
 """
 
 import os
+from functools import lru_cache
 
 from cryptography.fernet import Fernet
 
 
+@lru_cache(maxsize=1)
 def _fernet() -> Fernet:
+    """Return a cached Fernet instance built from ENCRYPTION_KEY.
+
+    The instance is constructed once and reused — avoids repeated env lookups
+    and key parsing on every encrypt/decrypt call.
+    Raises RuntimeError if the env var is missing.
+    """
     key = os.getenv("ENCRYPTION_KEY")
     if not key:
         raise RuntimeError(
             "ENCRYPTION_KEY environment variable is not set. "
-            "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            "Generate one with: "
+            'python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
         )
     return Fernet(key.encode())
+
+
+def validate_encryption_key() -> None:
+    """Call at application startup to fail fast if ENCRYPTION_KEY is missing.
+
+    Raises RuntimeError if the env var is absent so the problem surfaces
+    immediately at boot rather than on the first city-report request.
+    """
+    _fernet()  # raises if key is missing or invalid
 
 
 def encrypt(plaintext: str) -> str:

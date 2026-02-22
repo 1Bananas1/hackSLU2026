@@ -16,7 +16,7 @@ Typical usage from the Flask backend:
     end_session(session.id)
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from google.cloud.firestore import Query
@@ -55,7 +55,7 @@ def end_session(session_id: str) -> None:
     """
     db.collection(COLLECTION).document(session_id).update(
         {
-            "end_time": datetime.utcnow(),
+            "end_time": datetime.now(timezone.utc),
             "status": "completed",
         }
     )

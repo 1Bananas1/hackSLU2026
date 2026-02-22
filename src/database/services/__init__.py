@@ -19,7 +19,7 @@ from .report_service import (
     get_reports_by_hazard,
 )
 from .storage_service import upload_frame
-from .encryption import encrypt, decrypt
+from .encryption import encrypt, decrypt, validate_encryption_key
 
 __all__ = [
     # hazard
@@ -44,4 +44,5 @@ __all__ = [
     # encryption
     "encrypt",
     "decrypt",
+    "validate_encryption_key",
 ]

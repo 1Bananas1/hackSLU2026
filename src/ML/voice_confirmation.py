@@ -17,12 +17,14 @@ import time
 
 try:
     import pyttsx3
+
     _TTS_AVAILABLE = True
 except ImportError:
     _TTS_AVAILABLE = False
 
 try:
     import speech_recognition as sr
+
     _STR_AVAILABLE = True
 except ImportError:
     _STR_AVAILABLE = False
@@ -32,16 +34,40 @@ except ImportError:
 # Response keyword sets
 # ---------------------------------------------------------------------------
 AFFIRMATIVES = {
-    "yes", "yeah", "yep", "yup", "correct", "right",
-    "affirmative", "confirm", "sure", "absolutely",
-    "definitely", "of course", "indeed", "positive",
-    "true", "aye", "ok", "okay",
+    "yes",
+    "yeah",
+    "yep",
+    "yup",
+    "correct",
+    "right",
+    "affirmative",
+    "confirm",
+    "sure",
+    "absolutely",
+    "definitely",
+    "of course",
+    "indeed",
+    "positive",
+    "true",
+    "aye",
+    "ok",
+    "okay",
 }
 
 NEGATIVES = {
-    "no", "nope", "nah", "negative", "wrong", "incorrect",
-    "discard", "ignore", "false", "nay", "never",
-    "not", "none",
+    "no",
+    "nope",
+    "nah",
+    "negative",
+    "wrong",
+    "incorrect",
+    "discard",
+    "ignore",
+    "false",
+    "nay",
+    "never",
+    "not",
+    "none",
 }
 
 
@@ -76,9 +102,7 @@ class VoiceConfirmationHandler:
 
         # --- TTS setup ---
         if not _TTS_AVAILABLE:
-            raise RuntimeError(
-                "pyttsx3 not installed. Run: pip install pyttsx3"
-            )
+            raise RuntimeError("pyttsx3 not installed. Run: pip install pyttsx3")
         self._tts = pyttsx3.init()
         self._tts.setProperty("rate", tts_rate)
         # Use a threading lock so speak() calls are serialized
@@ -131,8 +155,7 @@ class VoiceConfirmationHandler:
         # --- Reprompt (once) ---
         print("[VOICE] Response ambiguous or missing. Reprompting.")
         self._speak(
-            "Sorry, I didn't catch that. "
-            "Was that a pothole? Please say yes or no."
+            "Sorry, I didn't catch that. Was that a pothole? Please say yes or no."
         )
         text = self._listen()
         result = self._parse(text)
@@ -145,7 +168,9 @@ class VoiceConfirmationHandler:
             return False
 
         # --- Fallback ---
-        print(f"[VOICE] No clear response after reprompt. Applying fallback: {self.fallback}.")
+        print(
+            f"[VOICE] No clear response after reprompt. Applying fallback: {self.fallback}."
+        )
         if self.fallback == "keep":
             self._speak("No response received. Keeping detection as unconfirmed.")
             return True
@@ -159,7 +184,7 @@ class VoiceConfirmationHandler:
 
     def _speak(self, text: str) -> None:
         """Blocking TTS playback."""
-        print(f"[VOICE] Speaking: \"{text}\"")
+        print(f'[VOICE] Speaking: "{text}"')
         with self._tts_lock:
             self._tts.say(text)
             self._tts.runAndWait()
@@ -180,7 +205,7 @@ class VoiceConfirmationHandler:
                     phrase_time_limit=self.phrase_limit,
                 )
             text = self._recognizer.recognize_google(audio).lower().strip()
-            print(f"[VOICE] Heard: \"{text}\"")
+            print(f'[VOICE] Heard: "{text}"')
             return text
         except sr.WaitTimeoutError:
             print("[VOICE] No speech detected within timeout.")

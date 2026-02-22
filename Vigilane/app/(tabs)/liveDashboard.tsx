@@ -1,27 +1,56 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ImageBackground,
   StatusBar,
   Animated,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { createSession, endSession, getSessionHazards, createHazard } from '../../services/api';
-import { Hazard, Session } from '../../types';
-import { Toast, useToast } from '../../components/toast';
+import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
+import * as Location from 'expo-location';
+import * as SecureStore from 'expo-secure-store';
 
-const DEVICE_ID = 'dashcam_0';
+import { usePotholeDetector } from '@/hooks/usePotholeDetector';
+import { writeHazard } from '@/services/firestore';
+import { createSession, endSession, createHazard, getSessionHazards } from '@/services/api';
+import type { Hazard, Session } from '@/types';
+import { Toast, useToast } from '@/components/toast';
+
 const POLL_INTERVAL_MS = 3000;
+const USE_BACKEND_POLLING = (process.env.EXPO_PUBLIC_USE_BACKEND_POLLING ?? 'false') === 'true';
+
+const DEVICE_ID_KEY = 'vigilane_device_id_v1';
+
+function randomId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function getOrCreateDeviceId(prefix: string): Promise<string> {
+  try {
+    const existing = await SecureStore.getItemAsync(DEVICE_ID_KEY);
+    if (existing) return existing;
+
+    const created = `${prefix}-${randomId()}`;
+    await SecureStore.setItemAsync(DEVICE_ID_KEY, created);
+    return created;
+  } catch {
+    return `${prefix}-${randomId()}`;
+  }
+}
 
 function formatElapsed(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = seconds % 60;
   return [h, m, s].map((v) => String(v).padStart(2, '0')).join(':');
+}
+
+function mphFromMetersPerSecond(mps: number): number {
+  return mps * 2.2369362920544;
 }
 
 export default function VigilaneLiveDashboard() {
@@ -35,19 +64,78 @@ export default function VigilaneLiveDashboard() {
   const [sessionLoading, setSessionLoading] = useState(false);
   const { toast, showToast } = useToast();
 
-  // Pulse + bounce animations
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+
+  // ── Camera ────────────────────────────────────────────────────────────────
+  const { hasPermission, requestPermission } = useCameraPermission();
+  const device = useCameraDevice('back');
+  const { frameProcessor, lastAlert, modelState } = usePotholeDetector();
+
+  // ── Speed (GPS) ───────────────────────────────────────────────────────────
+  const [speedMps, setSpeedMps] = useState<number | null>(null);
+  const speedLabel = useMemo(() => {
+    if (speedMps == null || speedMps < 0) return '—';
+    return `${Math.round(mphFromMetersPerSecond(speedMps))} mph`;
+  }, [speedMps]);
+
+  useEffect(() => {
+    void (async () => {
+      const id = await getOrCreateDeviceId(`${Platform.OS}_dashcam`);
+      setDeviceId(id);
+    })();
+  }, []);
+
+  // Request camera permission on mount.
+  useEffect(() => {
+    requestPermission();
+  }, [requestPermission]);
+
+  // GPS speed watcher (non-blocking). If permission denied, widget shows "—".
+  useEffect(() => {
+    let sub: Location.LocationSubscription | null = null;
+
+    void (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          setSpeedMps(null);
+          return;
+        }
+
+        sub = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.Balanced,
+            timeInterval: 1000,
+            distanceInterval: 1,
+          },
+          (pos) => {
+            const s = pos.coords.speed;
+            setSpeedMps(typeof s === 'number' ? s : null);
+          },
+        );
+      } catch {
+        setSpeedMps(null);
+      }
+    })();
+
+    return () => {
+      if (sub) sub.remove();
+    };
+  }, []);
+
+  // ── Animations ────────────────────────────────────────────────────────────
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.2, duration: 800, useNativeDriver: true }),
         Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
-      ])
+      ]),
     ).start();
     Animated.loop(
       Animated.sequence([
         Animated.timing(bounceAnim, { toValue: -8, duration: 600, useNativeDriver: true }),
         Animated.timing(bounceAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
-      ])
+      ]),
     ).start();
   }, [pulseAnim, bounceAnim]);
 
@@ -70,6 +158,11 @@ export default function VigilaneLiveDashboard() {
 
   const handleToggleSession = async () => {
     if (sessionLoading) return;
+    if (!deviceId) {
+      showToast('Device ID not ready yet', 'info');
+      return;
+    }
+
     setSessionLoading(true);
     try {
       if (session) {
@@ -79,7 +172,7 @@ export default function VigilaneLiveDashboard() {
         setElapsedSeconds(0);
         showToast('Session ended', 'info');
       } else {
-        const s = await createSession(DEVICE_ID);
+        const s = await createSession(deviceId);
         setSession(s);
         showToast('Session started', 'success');
       }
@@ -91,26 +184,63 @@ export default function VigilaneLiveDashboard() {
     }
   };
 
-  // Poll session hazards for live detection
+  // Optional backend polling: keeps API endpoint relevant for hybrid mode.
   const pollHazards = useCallback(async () => {
     if (!session) return;
     try {
       const hazards = await getSessionHazards(session.id);
-      if (hazards.length > 0) {
-        setLatestHazard(hazards[hazards.length - 1]);
-      }
+      if (!hazards || hazards.length === 0) return;
+
+      const newest = hazards[hazards.length - 1];
+      setLatestHazard((prev) => {
+        if (!prev) return newest;
+
+        const prevTs = new Date(prev.timestamp).getTime();
+        const newTs = new Date(newest.timestamp).getTime();
+        return newTs > prevTs ? newest : prev;
+      });
     } catch {
-      // Silently ignore poll failures
+      // ignore
     }
   }, [session]);
 
   useEffect(() => {
-    if (!session) return;
-    pollHazards();
-    const interval = setInterval(pollHazards, POLL_INTERVAL_MS);
+    if (!session || !USE_BACKEND_POLLING) return;
+    void pollHazards();
+    const interval = setInterval(() => void pollHazards(), POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [session, pollHazards]);
 
+  // ── On-device detection handler ───────────────────────────────────────────
+  useEffect(() => {
+    if (!lastAlert || !session) return;
+
+    const localHazard: Hazard = {
+      id: `local-${lastAlert.timestamp}`,
+      session_id: session.id,
+      event_type: lastAlert.labels[0] ?? 'pothole',
+      confidence: lastAlert.confidence,
+      labels: lastAlert.labels,
+      bboxes: lastAlert.bboxes,
+      frame_number: 0,
+      timestamp: new Date(lastAlert.timestamp).toISOString(),
+      status: 'pending',
+    };
+
+    setLatestHazard(localHazard);
+
+    void writeHazard(session.id, {
+      confidence: lastAlert.confidence,
+      bboxes: lastAlert.bboxes,
+      labels: lastAlert.labels,
+      frameNumber: 0,
+    });
+
+    const clearTimer = setTimeout(() => setLatestHazard(null), 30_000);
+    return () => clearTimeout(clearTimer);
+  }, [lastAlert, session]);
+
+  // ── Manual report button ──────────────────────────────────────────────────
   const handleReportHazard = async () => {
     if (reporting || !session) return;
     setReporting(true);
@@ -122,10 +252,7 @@ export default function VigilaneLiveDashboard() {
         bboxes: [],
         frame_number: 0,
       });
-      // Immediately show the newly-created hazard in the UI
       setLatestHazard(newHazard);
-      // Re-poll so the hazard list stays in sync
-      await pollHazards();
       showToast('Hazard reported!', 'success');
     } catch (err) {
       console.error('Report hazard failed:', err);
@@ -135,33 +262,44 @@ export default function VigilaneLiveDashboard() {
     }
   };
 
-  // Show alert if the most recent hazard is within 30 seconds
-  const showAlert = latestHazard != null && (() => {
-    const ageMs = Date.now() - new Date(latestHazard.timestamp).getTime();
-    return ageMs < 30_000;
-  })();
+  const showAlert =
+    latestHazard != null &&
+    (() => {
+      const ageMs = Date.now() - new Date(latestHazard.timestamp).getTime();
+      return ageMs < 30_000;
+    })();
 
-  const alertLabel = showAlert && latestHazard
-    ? `${(latestHazard.labels[0] ?? 'hazard').charAt(0).toUpperCase() + (latestHazard.labels[0] ?? 'hazard').slice(1)} detected • ${Math.round(latestHazard.confidence * 100)}% confidence`
-    : null;
+  const alertLabel =
+    showAlert && latestHazard
+      ? `${(latestHazard.labels[0] ?? 'hazard').charAt(0).toUpperCase() + (latestHazard.labels[0] ?? 'hazard').slice(1)} detected • ${Math.round(latestHazard.confidence * 100)}% confidence`
+      : null;
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-
       <Toast {...toast} />
 
-      <ImageBackground
-        source={{ uri: 'https://images.unsplash.com/photo-1600030230325-188b89d4fb98?w=800&q=80' }}
-        style={StyleSheet.absoluteFillObject}
-        resizeMode="cover"
-      >
-        <View style={styles.overlay} />
-      </ImageBackground>
+      {hasPermission && device != null ? (
+        <Camera
+          style={StyleSheet.absoluteFill}
+          device={device}
+          isActive
+          frameProcessor={frameProcessor}
+          pixelFormat="yuv"
+        />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0a1628' }]} />
+      )}
+
+      <View style={styles.overlay} />
+
+      {modelState === 'loading' && (
+        <View style={styles.modelLoadingBadge}>
+          <Text style={styles.modelLoadingText}>Loading model…</Text>
+        </View>
+      )}
 
       <SafeAreaView style={styles.safeArea}>
-
-        {/* Top Bar */}
         <View style={styles.topBar}>
           <View style={styles.glassPanel}>
             <MaterialIcons name="verified-user" size={20} color={session ? '#34d399' : '#94a3b8'} />
@@ -183,24 +321,42 @@ export default function VigilaneLiveDashboard() {
           </View>
         </View>
 
-        {/* AR Detection Box — shown when recent hazard exists */}
-        {showAlert && latestHazard && (
+        {/* Speed widget */}
+        <View style={styles.speedWidget}>
+          <MaterialIcons name="speed" size={18} color="#e2e8f0" />
+          <Text style={styles.speedText}>{speedLabel}</Text>
+        </View>
+
+        {showAlert && latestHazard && latestHazard.bboxes.length > 0 && (
           <View style={styles.arLayer}>
-            <View style={[styles.arBox, { top: '40%', left: '30%' }]}>
-              <View style={styles.arBadge}>
-                <MaterialIcons name="warning" size={12} color="#000" />
-                <Text style={styles.arBadgeText}>{(latestHazard.labels[0] ?? '').toUpperCase()}</Text>
+            {latestHazard.bboxes.map((bbox, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.arBox,
+                  {
+                    top: `${(bbox.y1 * 100).toFixed(1)}%` as unknown as number,
+                    left: `${(bbox.x1 * 100).toFixed(1)}%` as unknown as number,
+                    width: `${((bbox.x2 - bbox.x1) * 100).toFixed(1)}%` as unknown as number,
+                    height: `${((bbox.y2 - bbox.y1) * 100).toFixed(1)}%` as unknown as number,
+                  },
+                ]}
+              >
+                <View style={styles.arBadge}>
+                  <MaterialIcons name="warning" size={12} color="#000" />
+                  <Text style={styles.arBadgeText}>
+                    {(latestHazard.labels[i] ?? latestHazard.labels[0] ?? '').toUpperCase()}
+                  </Text>
+                </View>
+                <Text style={styles.arConfidence}>{Math.round(latestHazard.confidence * 100)}%</Text>
               </View>
-              <Text style={styles.arConfidence}>{Math.round(latestHazard.confidence * 100)}%</Text>
-            </View>
+            ))}
           </View>
         )}
 
         <View style={styles.flexSpacer} />
 
-        {/* Bottom Dashboard */}
         <View style={styles.bottomOverlay}>
-
           {alertLabel && (
             <Animated.View style={[styles.alertBannerContainer, { transform: [{ translateY: bounceAnim }] }]}>
               <View style={styles.alertBanner}>
@@ -224,14 +380,8 @@ export default function VigilaneLiveDashboard() {
               onPress={handleToggleSession}
               disabled={sessionLoading}
             >
-              <MaterialIcons
-                name={session ? 'stop-circle' : 'play-circle-filled'}
-                size={28}
-                color="#fff"
-              />
-              <Text style={styles.reportButtonText}>
-                {sessionLoading ? '…' : session ? 'Stop' : 'Start'}
-              </Text>
+              <MaterialIcons name={session ? 'stop-circle' : 'play-circle-filled'} size={28} color="#fff" />
+              <Text style={styles.reportButtonText}>{sessionLoading ? '…' : session ? 'Stop' : 'Start'}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -241,13 +391,10 @@ export default function VigilaneLiveDashboard() {
               disabled={reporting || !session}
             >
               <MaterialIcons name="add-alert" size={28} color="#fff" />
-              <Text style={styles.reportButtonText}>
-                {reporting ? 'Reporting…' : 'Report Hazard'}
-              </Text>
+              <Text style={styles.reportButtonText}>{reporting ? 'Reporting…' : 'Report Hazard'}</Text>
             </TouchableOpacity>
           </View>
         </View>
-
       </SafeAreaView>
     </View>
   );
@@ -255,8 +402,19 @@ export default function VigilaneLiveDashboard() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
   safeArea: { flex: 1 },
+  modelLoadingBadge: {
+    position: 'absolute',
+    top: 60,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 12,
+    zIndex: 30,
+  },
+  modelLoadingText: { color: '#94a3b8', fontSize: 12, fontWeight: '600' },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -281,11 +439,27 @@ const styles = StyleSheet.create({
   recPanel: { gap: 6 },
   pulsingDot: { width: 12, height: 12, backgroundColor: '#ef4444', borderRadius: 6 },
   recText: { color: '#fff', fontSize: 12, fontWeight: '600', fontFamily: 'monospace', letterSpacing: 1 },
+
+  speedWidget: {
+    marginTop: 10,
+    marginLeft: 16,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(16, 24, 34, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    zIndex: 20,
+  },
+  speedText: { color: '#e2e8f0', fontSize: 12, fontWeight: '700', fontFamily: 'monospace' },
+
   arLayer: { ...StyleSheet.absoluteFillObject, zIndex: 10, pointerEvents: 'none' },
   arBox: {
     position: 'absolute',
-    width: 120,
-    height: 90,
     borderWidth: 2,
     borderColor: 'rgba(245, 158, 11, 0.8)',
     backgroundColor: 'rgba(245, 158, 11, 0.1)',
@@ -333,18 +507,6 @@ const styles = StyleSheet.create({
   alertTitle: { color: '#0f172a', fontSize: 14, fontWeight: '700' },
   alertSubtitle: { color: '#334155', fontSize: 12, fontWeight: '600' },
   dashGrid: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
-  speedWidget: {
-    width: 100,
-    height: 100,
-    backgroundColor: 'rgba(16, 24, 34, 0.8)',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  speedNumber: { color: '#fff', fontSize: 40, fontWeight: '900', lineHeight: 40 },
-  speedUnit: { color: '#94a3b8', fontSize: 12, fontWeight: '700', letterSpacing: 2, marginTop: 4 },
   sessionButton: {
     width: 88,
     height: 64,
