@@ -26,6 +26,7 @@ import { createSession, endSession, createHazard } from "@/services/api";
 import { useAuth } from "@/context/AuthContext";
 import type { Hazard } from "@/types";
 import { Toast, useToast } from "@/components/toast";
+import MapModal from "@/components/MapModal";
 
 function formatElapsed(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -41,6 +42,7 @@ function mphFromMetersPerSecond(mps: number): number {
 export default function VigilaneLiveDashboard() {
   const { user } = useAuth();
   const isFocused = useIsFocused();
+  const cameraRef = useRef<Camera>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const bounceAnim = useRef(new Animated.Value(0)).current;
 
@@ -76,6 +78,7 @@ export default function VigilaneLiveDashboard() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [reporting, setReporting] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [mapVisible, setMapVisible] = useState(false);
   const { toast, showToast } = useToast();
 
   // ── Alert volume / confidence threshold ───────────────────────────────────
@@ -110,6 +113,7 @@ export default function VigilaneLiveDashboard() {
 
   // ── Speed (GPS) ───────────────────────────────────────────────────────────
   const [speedMps, setSpeedMps] = useState<number | null>(null);
+  const [currentPosition, setCurrentPosition] = useState<{ lat: number; lng: number } | null>(null);
   const speedLabel = useMemo(() => {
     if (speedMps == null || speedMps < 0) return "—";
     return `${Math.round(mphFromMetersPerSecond(speedMps))} mph`;
@@ -141,6 +145,7 @@ export default function VigilaneLiveDashboard() {
           (pos) => {
             const s = pos.coords.speed;
             setSpeedMps(typeof s === "number" ? s : null);
+            setCurrentPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
           },
         );
       } catch {
@@ -240,18 +245,18 @@ export default function VigilaneLiveDashboard() {
       const deviceId = await getDeviceId();
       const session = await createSession(deviceId);
       setSessionId(session.id);
-      setIsRecording(true);
-      showToast("Recording started", "success");
     } catch (err) {
-      runMorphAnim(false); // revert on failure
-      console.error("Start session failed:", err);
-      showToast("Failed to start session", "error");
+      // Backend unreachable — run in offline/local mode without a session
+      console.warn("Start session failed (offline mode):", err);
+      setSessionId(null);
     }
+    setIsRecording(true);
+    showToast("Recording started", "success");
   };
 
   // ── On-device detection handler ───────────────────────────────────────────
   useEffect(() => {
-    if (!lastAlert || !isRecording || !sessionId) return;
+    if (!lastAlert || !isRecording) return;
 
     const localHazard: Hazard = {
       id: `local-${lastAlert.timestamp}`,
@@ -267,13 +272,30 @@ export default function VigilaneLiveDashboard() {
 
     setLatestHazard(localHazard);
 
-    void writeHazard(sessionId, {
-      confidence: lastAlert.confidence,
-      bboxes: lastAlert.bboxes,
-      labels: lastAlert.labels,
-      frameNumber: 0,
-      user_uid: user?.uid,
-    });
+    if (sessionId) {
+      // Capture a snapshot then persist with photo URL
+      (async () => {
+        let photoUri: string | undefined;
+        try {
+          const photo = await cameraRef.current?.takePhoto();
+          if (photo) {
+            photoUri = `file://${photo.path}`;
+          }
+        } catch (captureErr) {
+          console.warn("[liveDashboard] takePhoto failed:", captureErr);
+        }
+
+        void writeHazard(sessionId, {
+          confidence: lastAlert.confidence,
+          bboxes: lastAlert.bboxes,
+          labels: lastAlert.labels,
+          frameNumber: 0,
+          user_uid: user?.uid,
+          photoUri,
+          location: currentPosition,
+        });
+      })();
+    }
 
     // ── Voice alert on the phone ──────────────────────────────────────────
     // alertVolume === 0 already raises confidenceThreshold to 0.99, so by
@@ -287,25 +309,50 @@ export default function VigilaneLiveDashboard() {
 
     const clearTimer = setTimeout(() => setLatestHazard(null), 5_000);
     return () => clearTimeout(clearTimer);
-  }, [lastAlert, isRecording, sessionId]);
+  }, [lastAlert, isRecording, sessionId, currentPosition]);
 
   // ── Manual report button ──────────────────────────────────────────────────
   const handleReportHazard = async () => {
     if (reporting) return;
-    if (!sessionId) {
-      showToast("Start recording to create a session first", "error");
+    if (!isRecording) {
+      showToast("Start recording first", "error");
       return;
     }
     setReporting(true);
+    const now = new Date().toISOString();
     try {
-      const newHazard = await createHazard({
-        session_id: sessionId,
-        confidence: 1.0,
-        labels: ["manual"],
-        bboxes: [],
-        frame_number: 0,
-      });
-      setLatestHazard(newHazard);
+      if (sessionId) {
+        // Backend available — persist via API
+        const newHazard = await createHazard({
+          session_id: sessionId,
+          confidence: 1.0,
+          labels: ["manual"],
+          bboxes: [],
+          frame_number: 0,
+        });
+        setLatestHazard(newHazard);
+      } else {
+        // Offline — write directly to Firestore and show locally
+        const localHazard: Hazard = {
+          id: `local-${Date.now()}`,
+          user_uid: user?.uid ?? "",
+          event_type: "manual",
+          confidence: 1.0,
+          labels: ["manual"],
+          bboxes: [],
+          frame_number: 0,
+          timestamp: now,
+          status: "pending",
+        };
+        void writeHazard(null, {
+          confidence: 1.0,
+          labels: ["manual"],
+          bboxes: [],
+          frameNumber: 0,
+          user_uid: user?.uid,
+        });
+        setLatestHazard(localHazard);
+      }
       showToast("Hazard reported!", "success");
     } catch (err) {
       console.error("Report hazard failed:", err);
@@ -336,8 +383,16 @@ export default function VigilaneLiveDashboard() {
       />
       <Toast {...toast} />
 
+      {/* Map modal — shown when user taps the map button */}
+      <MapModal
+        visible={mapVisible}
+        onClose={() => setMapVisible(false)}
+        currentLocation={currentPosition}
+      />
+
       {hasPermission && device != null ? (
         <Camera
+          ref={cameraRef}
           style={StyleSheet.absoluteFill}
           device={device}
           isActive={isFocused}
@@ -371,23 +426,34 @@ export default function VigilaneLiveDashboard() {
             <Text style={styles.speedText}>{speedLabel}</Text>
           </View>
 
-          {/* Right — REC timer / STANDBY */}
-          <View style={[styles.glassPanel, styles.recPanel]}>
-            {isRecording ? (
-              <>
-                <Animated.View
-                  style={[
-                    styles.pulsingDot,
-                    { transform: [{ scale: pulseAnim }] },
-                  ]}
-                />
-                <Text style={styles.recText}>
-                  REC {formatElapsed(elapsedSeconds)}
-                </Text>
-              </>
-            ) : (
-              <Text style={styles.recText}>STANDBY</Text>
-            )}
+          {/* Right side: REC timer + map button */}
+          <View style={styles.topBarRight}>
+            <View style={[styles.glassPanel, styles.recPanel]}>
+              {isRecording ? (
+                <>
+                  <Animated.View
+                    style={[
+                      styles.pulsingDot,
+                      { transform: [{ scale: pulseAnim }] },
+                    ]}
+                  />
+                  <Text style={styles.recText}>
+                    REC {formatElapsed(elapsedSeconds)}
+                  </Text>
+                </>
+              ) : (
+                <Text style={styles.recText}>STANDBY</Text>
+              )}
+            </View>
+
+            {/* Map button */}
+            <TouchableOpacity
+              style={styles.mapBtn}
+              activeOpacity={0.8}
+              onPress={() => setMapVisible(true)}
+            >
+              <MaterialIcons name="map" size={20} color="#fff" />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -549,9 +615,25 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 16,
     paddingTop: 16,
     zIndex: 20,
+  },
+  topBarRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  mapBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(16, 24, 34, 0.7)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
   },
   glassPanel: {
     flexDirection: "row",

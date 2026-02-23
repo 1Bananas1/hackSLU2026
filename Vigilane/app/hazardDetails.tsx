@@ -8,11 +8,14 @@ import {
   ImageBackground,
   StatusBar,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { getHazard, deleteHazard } from '../services/api';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
+import { deleteHazard } from '../services/api';
 import { Hazard } from '../types';
 import { Toast, useToast } from '../components/toast';
 
@@ -59,11 +62,45 @@ export default function HazardEventDetails() {
 
   useEffect(() => {
     if (!id) return;
+    // Skip local-only placeholder IDs (not yet in Firestore)
+    if (id.startsWith('local-')) {
+      setError('This detection is still being saved. Check back in a moment.');
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
-    getHazard(id)
-      .then(setHazard)
-      .catch(() => setError('Failed to load hazard details.'))
+
+    // Fetch directly from Firestore by document ID — fast, no API needed
+    getDoc(doc(db, 'hazards', id))
+      .then((snap) => {
+        if (!snap.exists()) {
+          setError('Hazard not found.');
+          return;
+        }
+        const data = snap.data();
+        const raw = data.timestamp;
+        const timestamp =
+          raw?.toDate?.()?.toISOString?.() ??
+          (typeof raw === 'string' ? raw : new Date().toISOString());
+        setHazard({
+          id: snap.id,
+          user_uid: data.user_uid ?? '',
+          event_type: data.labels?.[0] ?? data.event_type ?? 'unknown',
+          confidence: data.confidence ?? 0,
+          labels: data.labels ?? [],
+          bboxes: data.bboxes ?? [],
+          frame_number: data.frame_number ?? 0,
+          timestamp,
+          status: data.status ?? 'pending',
+          photo_url: data.photo_url ?? null,
+          location: data.location ?? null,
+        } as Hazard);
+      })
+      .catch((err) => {
+        console.error('[HazardDetails] Firestore fetch failed:', err);
+        setError('Failed to load hazard details.');
+      })
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -170,7 +207,13 @@ export default function HazardEventDetails() {
           <View style={styles.section}>
             <View style={styles.locationHeader}>
               <Text style={styles.sectionTitle}>LOCATION</Text>
-              <TouchableOpacity style={styles.openMapsBtn}>
+              <TouchableOpacity
+                style={styles.openMapsBtn}
+                onPress={() => {
+                  const { lat, lng } = hazard.location!;
+                  Linking.openURL(`https://maps.apple.com/?ll=${lat},${lng}&q=Hazard`);
+                }}
+              >
                 <Text style={styles.openMapsText}>Open Maps</Text>
                 <MaterialIcons name="open-in-new" size={14} color="#1973f0" />
               </TouchableOpacity>

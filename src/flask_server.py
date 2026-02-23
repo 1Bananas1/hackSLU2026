@@ -36,8 +36,8 @@ def _session_to_json(session):
     return {
         "id": session.id,
         "device_id": session.device_id,
-        "start_time": _iso(session.start_time),
-        "end_time": _iso(session.end_time),
+        "start_time": _iso(session.created_at),
+        "end_time": _iso(session.ended_at),
         "hazard_count": session.hazard_count,
         "status": session.status,
     }
@@ -166,6 +166,16 @@ def api_create_hazard():
     return jsonify(_hazard_to_json(saved)), 201
 
 
+@app.get("/api/hazards/<hazard_id>")
+def api_get_hazard(hazard_id):
+    if not _service_ready():
+        return jsonify({"error": SERVICE_IMPORT_ERROR}), 500
+    hazard = get_hazard(hazard_id)
+    if not hazard:
+        return jsonify({"error": "Hazard not found"}), 404
+    return jsonify(_hazard_to_json(hazard))
+
+
 @app.delete("/api/hazards/<hazard_id>")
 def api_delete_hazard(hazard_id):
     if not _service_ready():
@@ -210,6 +220,11 @@ def get_hazards_alias():
 @app.post("/hazards")
 def create_hazard_alias():
     return api_create_hazard()
+
+
+@app.get("/hazards/<hazard_id>")
+def get_hazard_alias(hazard_id):
+    return api_get_hazard(hazard_id)
 
 
 @app.delete("/hazards/<hazard_id>")

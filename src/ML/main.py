@@ -36,7 +36,7 @@ from ultralytics import YOLO
 # ---------------------------------------------------------------------------
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "best.pt")
 
-CONFIDENCE_THRESHOLD = 0.15        # min per-detection YOLO confidence (normal)
+CONFIDENCE_THRESHOLD = 0.01       # min per-detection YOLO confidence (normal)
 SILENT_CONFIDENCE_THRESHOLD = 0.99  # threshold when system audio is muted
 HAZARD_CLASSES = {  # all pavement distress types worth alerting on
     "pothole",
@@ -47,9 +47,9 @@ HAZARD_CLASSES = {  # all pavement distress types worth alerting on
     "patching",
 }
 ROI_TOP_FRACTION = (
-    0.55  # ignore detections in the top N% of frame (sky/horizon can't be potholes)
+    0.01  # ignore detections in the top N% of frame (sky/horizon can't be potholes)
 )
-ROI_BOTTOM_FRACTION = 0.88  # ignore detections below this point (car hood reflections)
+ROI_BOTTOM_FRACTION = 0.08  # ignore detections below this point (car hood reflections)
 FRAME_SKIP = 1  # run inference every frame (damage passes fast at highway speeds)
 WINDOW_SIZE = 3  # rolling window for smoothing (processed frames)
 SMOOTHED_THRESHOLD = (

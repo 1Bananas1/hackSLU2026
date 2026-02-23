@@ -68,33 +68,33 @@ export async function healthCheck(): Promise<{ status: string; service: string }
 // Hazards  —  POST/GET/DELETE /hazards
 // ---------------------------------------------------------------------------
 
-/** GET /hazards — all hazards (optionally filtered by session) */
+/** GET /api/hazards — all hazards (optionally filtered by session) */
 export async function getHazards(): Promise<Hazard[]> {
   console.log('[API] getHazards() called');
-  const result = await request<Hazard[]>('/hazards');
+  const result = await request<Hazard[]>('/api/hazards');
   console.log(`[API] getHazards() returned ${result.length} hazards`);
   return result;
 }
 
 /** GET /api/hazards/<id> — fetch one hazard */
 export function getHazard(id: string): Promise<Hazard> {
-  return request<Hazard>(`/hazards/${id}`);
+  return request<Hazard>(`/api/hazards/${id}`);
 }
 
 /**
- * POST /hazards — record a new hazard event.
+ * POST /api/hazards — record a new hazard event.
  * user_uid is set server-side from the auth token; do not include it in payload.
  */
 export function createHazard(payload: CreateHazardPayload): Promise<Hazard> {
-  return request<Hazard>('/hazards', {
+  return request<Hazard>('/api/hazards', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
-/** DELETE /hazards/<id> — permanently delete a hazard (owner only) */
+/** DELETE /api/hazards/<id> — permanently delete a hazard (owner only) */
 export function deleteHazard(id: string): Promise<{ message: string; hazard_id: string }> {
-  return request<{ message: string; hazard_id: string }>(`/hazards/${id}`, {
+  return request<{ message: string; hazard_id: string }>(`/api/hazards/${id}`, {
     method: 'DELETE',
   });
 }
