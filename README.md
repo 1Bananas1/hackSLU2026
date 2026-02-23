@@ -46,7 +46,6 @@ Vigilane/
 │   │   ├── main.py            # App factory + health endpoint (entry point)
 │   │   ├── middleware/        # @require_auth decorator (Firebase token verification)
 │   │   ├── routes/            # Blueprints: hazards.py, sessions.py
-│   │   └── services/          # Business logic layer
 │   ├── database/              # Firestore models, services, seed scripts
 │   │   ├── config.py          # Firebase Admin SDK initialization
 │   │   ├── client.py          # Lazy Firestore client singleton
