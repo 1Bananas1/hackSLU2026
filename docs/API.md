@@ -62,7 +62,7 @@ No authentication required.
 ## Hazards
 
 Routes defined in [`src/api/routes/hazards.py`](../src/api/routes/hazards.py).
-Backed by [`src/database/services/hazard_service.py`](../src/database/services/hazard_service.py).
+Backed by [`src/api/services/hazard_service.py`](../src/api/services/hazard_service.py).
 
 ---
 
