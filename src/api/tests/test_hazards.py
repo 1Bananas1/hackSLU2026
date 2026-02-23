@@ -27,7 +27,7 @@ def app():
     """Create a test Flask app with Firebase and Firestore mocked out."""
     with (
         patch("src.database.config.initialize_firebase"),
-        patch("src.api.services.encryption.validate_encryption_key"),
+        patch("src.database.services.encryption.validate_encryption_key"),
         patch("flask_cors.CORS"),
     ):
         from src.api.main import create_app

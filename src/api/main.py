@@ -18,7 +18,7 @@ except ModuleNotFoundError:  # pragma: no cover
     CORS = None
 
 from src.database.config import initialize_firebase
-from src.api.services.encryption import validate_encryption_key
+from src.database.services.encryption import validate_encryption_key
 
 from src.api.routes import register_routes
 
