@@ -36,10 +36,10 @@ jobs:
           pip install -r src/requirements.txt
 
       - name: Check Python lint (Ruff)
-        run: ruff check src/flask_server.py tests
+        run: ruff check src tests
 
       - name: Check Python formatting (Ruff)
-        run: ruff format --check src/flask_server.py tests
+        run: ruff format --check src tests
 
       - name: Validate Python syntax
         run: python -m compileall src
