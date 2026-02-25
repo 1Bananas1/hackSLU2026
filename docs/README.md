@@ -296,4 +296,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `main`, `devel
 ## Firestore clearing
 
 To bulk delete all documents in `sessions` and `hazards` collections in Firestore, run the following command in the Firebase CLI:
-```gcloud firestore bulk-delete --collection-ids='hazards','sessions'```
+
+```bash
+gcloud firestore bulk-delete --collection-ids='hazards','sessions'
+```
