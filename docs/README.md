@@ -289,4 +289,11 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `main`, `devel
 | Job | Steps |
 |---|---|
 | `python-validation` | Ruff lint, Ruff format check, `compileall`, `pytest` |
-| `mobile-lint` | `npm ci`, `expo lint` |
+| `mobile-lint` | `npm ci`, `expo lint` 
+
+---
+
+## Firestore clearing
+
+To bulk delete all documents in `sessions` and `hazards` collections in Firestore, run the following command in the Firebase CLI:
+```gcloud firestore bulk-delete --collection-ids='hazards','sessions'```
