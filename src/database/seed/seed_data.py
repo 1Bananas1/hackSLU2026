@@ -52,7 +52,7 @@ def seed() -> None:
     )
     print(f"[SEED] User upserted: users/{TEST_USER_UID}")
 
-    print(f"[SEED] Writing hazards ...")
+    print("[SEED] Writing hazards ...")
     base_time = datetime.now(timezone.utc)
 
     for sample in SAMPLE_HAZARDS:

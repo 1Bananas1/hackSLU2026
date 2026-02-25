@@ -17,7 +17,10 @@ Output: runs/detect/pothole_finetune/weights/best.pt
 # Credentials — loaded from .env at project root
 # ---------------------------------------------------------------------------
 import os
+
 from dotenv import load_dotenv
+from roboflow import Roboflow
+from ultralytics import YOLO
 
 load_dotenv()  # loads .env from cwd or any parent directory
 
@@ -41,8 +44,6 @@ RUN_NAME = "pothole_finetune"
 # ---------------------------------------------------------------------------
 # Download dataset + train
 # ---------------------------------------------------------------------------
-from roboflow import Roboflow
-from ultralytics import YOLO
 
 if __name__ == "__main__":
     print("[INFO] Downloading dataset from Roboflow...")

@@ -4,7 +4,7 @@ Flask application factory for the HackSLU2026 backend API.
 
 import os
 
-from flask import Flask, jsonify, Response
+from flask import Flask, jsonify
 
 try:
     from flask_cors import CORS  # type: ignore

@@ -1,6 +1,7 @@
 # paste into a temp script, run once
 from PIL import Image
-import cv2, torch
+import cv2
+import torch
 from transformers import AutoModelForCausalLM, AutoProcessor
 
 processor = AutoProcessor.from_pretrained(

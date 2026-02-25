@@ -13,7 +13,6 @@ Dependencies:
 """
 
 import threading
-import time
 
 try:
     import pyttsx3
