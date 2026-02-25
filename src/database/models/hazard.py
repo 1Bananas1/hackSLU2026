@@ -23,7 +23,9 @@ class Hazard:
     location: Optional[Dict[str, float]] = None  # {"lat": ..., "lng": ...}
     status: str = "pending"  # "pending" | "reported" | "dismissed"
     expires_at: datetime = field(
-        default_factory=lambda: datetime.now(timezone.utc) + timedelta(hours=HAZARD_TTL_HOURS)
+        default_factory=lambda: (
+            datetime.now(timezone.utc) + timedelta(hours=HAZARD_TTL_HOURS)
+        )
     )
     id: Optional[str] = None  # populated after Firestore write
 
