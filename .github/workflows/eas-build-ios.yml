@@ -1,0 +1,78 @@
+name: EAS Build iOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Build profile"
+        required: true
+        default: "development"
+        type: choice
+        options:
+          - development
+          - preview
+          - production
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: EAS iOS Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Vigilane
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: Vigilane/package-lock.json
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Set up EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build iOS with EAS
+        id: eas-build
+        run: |
+          BUILD_JSON=$(eas build \
+            --profile ${{ inputs.profile }} \
+            --platform ios \
+            --non-interactive \
+            --wait \
+            --json 2>/dev/null)
+          ARTIFACT_URL=$(echo "$BUILD_JSON" | jq -r '.[0].artifacts.buildUrl')
+          BUILD_ID=$(echo "$BUILD_JSON" | jq -r '.[0].id')
+          echo "artifact_url=$ARTIFACT_URL" >> "$GITHUB_OUTPUT"
+          echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Post build summary with QR code
+        run: |
+          ARTIFACT_URL="${{ steps.eas-build.outputs.artifact_url }}"
+          ENCODED_URL=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$ARTIFACT_URL', safe=''))")
+          {
+            echo "## ✅ iOS Build Complete"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **Profile** | \`${{ inputs.profile }}\` |"
+            echo "| **Platform** | iOS |"
+            echo "| **Direct download** | $ARTIFACT_URL |"
+            echo ""
+            echo "### Install QR Code"
+            echo "Scan with your iPhone to download the \`.ipa\` directly — no Expo account needed."
+            echo ""
+            echo "![QR Code](https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=$ENCODED_URL)"
+          } >> "$GITHUB_STEP_SUMMARY"
