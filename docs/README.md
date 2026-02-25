@@ -93,31 +93,14 @@ cd Vigilane
 
 ## 2 — Secrets & credentials
 
-### 2a — Firebase service account key (backend)
+All environment variables live in a **single file**: `Vigilane/.env`.
 
-1. Go to [Firebase Console](https://console.firebase.google.com) → Project Settings → Service accounts.
-2. Click **Generate new private key** and save as `serviceAccountKey.json` in the repo root.
-
-Create `src/.env` (copy from `src/.env.example`):
+1. Copy the template: `cp Vigilane/.env.example Vigilane/.env`
+2. Fill in the values (never commit the filled-in file).
 
 ```dotenv
-# Path to serviceAccountKey.json — relative to repo root when using python -m src.main
-FIREBASE_KEY_PATH=serviceAccountKey.json
-
-# Required for POST /hazards/<id>/report — encrypts reporter PII before Firestore storage
-# Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-ENCRYPTION_KEY=<your-fernet-key>
-
-# Optional — restrict CORS origins (comma-separated); defaults to *
-# CORS_ORIGINS=http://localhost:3000,http://192.168.1.x:5000
-```
-
-### 2b — Frontend environment variables
-
-Create `Vigilane/.env` by copying `Vigilane/.env.example` (never commit the filled-in file):
-
-```dotenv
-# Firebase web config — Firebase Console → Project Settings → Your apps → Web app
+# ── Firebase Web SDK (Expo app) ───────────────────────────────────────────────
+# Firebase Console → Project Settings → Your apps → Web app
 EXPO_PUBLIC_FIREBASE_API_KEY=your-web-api-key
 EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project-id.firebaseapp.com
 EXPO_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
@@ -128,7 +111,22 @@ EXPO_PUBLIC_FIREBASE_APP_ID=1:000000000000:web:xxxx
 # Backend URL — use your machine's LAN IP when testing on a physical device
 # Defaults: http://10.0.2.2:5000 (Android emulator) / http://127.0.0.1:5000 (iOS sim)
 # EXPO_PUBLIC_API_BASE_URL=http://192.168.x.x:5000
+
+# ── Python backend (Flask + Firebase Admin SDK) ───────────────────────────────
+# These are ignored by Expo — only the Python process reads them.
+
+# Path to serviceAccountKey.json (download from Firebase Console → Service accounts)
+FIREBASE_KEY_PATH=serviceAccountKey.json
+
+# Required for POST /hazards/<id>/report — encrypts reporter PII at rest
+# Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+ENCRYPTION_KEY=<your-fernet-key>
+
+# Optional — restrict CORS origins (comma-separated); defaults to *
+# CORS_ORIGINS=http://localhost:3000,http://192.168.1.x:5000
 ```
+
+The Python backend (`src/database/config.py`) loads `Vigilane/.env` automatically via `python-dotenv`. Expo reads only the `EXPO_PUBLIC_*` prefixed variables at build time.
 
 ---
 
@@ -242,7 +240,12 @@ npx expo start
 
 ### Option B — Expo Go (limited)
 
-All screens work **except Google Sign-In** (the `exp://` redirect URI is rejected by Google OAuth).
+The following features require a dev build and **do not work in Expo Go**:
+
+- **Camera / ML detection** — `react-native-vision-camera` and `react-native-fast-tflite` are native-only modules not bundled in Expo Go
+- **Google Sign-In** — the `exp://` redirect URI is rejected by Google OAuth
+
+Auth, hazard history, settings, and map views work normally. Use the dev bypass button on the login screen during development.
 
 ```bash
 npx expo start
@@ -264,10 +267,9 @@ EXPO_PUBLIC_API_BASE_URL=http://192.168.x.x:5000
 | File | Location | Committed? | Template |
 | --- | --- | --- | --- |
 | `serviceAccountKey.json` | repo root | No | — (download from Firebase Console) |
-| `src/.env` | `src/` | No | `src/.env.example` |
 | `Vigilane/.env` | `Vigilane/` | No | `Vigilane/.env.example` |
 
-All three files are listed in `.gitignore` and must be created locally after cloning.
+Both files are listed in `.gitignore` and must be created locally after cloning. There is only one `.env` file — it contains both Expo (`EXPO_PUBLIC_*`) and Python backend variables.
 
 ---
 
