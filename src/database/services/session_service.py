@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-SESSION_TTL_HOURS = 24
-
 from ..client import db
+
+SESSION_TTL_HOURS = 24
 
 
 @dataclass
