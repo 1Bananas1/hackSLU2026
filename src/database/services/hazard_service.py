@@ -49,11 +49,7 @@ def get_hazard(hazard_id: str) -> Optional[Hazard]:
 
 def get_hazards_by_user(user_uid: str) -> List[Hazard]:
     """Return all hazards owned by a user, newest first."""
-    docs = (
-        db.collection(COLLECTION)
-        .where("user_uid", "==", user_uid)
-        .stream()
-    )
+    docs = db.collection(COLLECTION).where("user_uid", "==", user_uid).stream()
     hazards = [Hazard.from_dict(doc.to_dict(), doc.id) for doc in docs]
     hazards.sort(key=lambda h: h.timestamp or datetime.min, reverse=True)
     return hazards
@@ -61,11 +57,7 @@ def get_hazards_by_user(user_uid: str) -> List[Hazard]:
 
 def get_hazards_by_session(session_id: str) -> List[Hazard]:
     """Return all hazards for a session, newest first."""
-    docs = (
-        db.collection(COLLECTION)
-        .where("session_id", "==", session_id)
-        .stream()
-    )
+    docs = db.collection(COLLECTION).where("session_id", "==", session_id).stream()
     hazards = [Hazard.from_dict(doc.to_dict(), doc.id) for doc in docs]
     hazards.sort(key=lambda h: h.timestamp or datetime.min, reverse=True)
     return hazards

@@ -34,7 +34,13 @@ def create_session(device_id: str) -> Session:
         "hazard_count": 0,
     }
     doc_ref.set(data)
-    return Session(id=doc_ref.id, device_id=device_id, status="active", created_at=now, hazard_count=0)
+    return Session(
+        id=doc_ref.id,
+        device_id=device_id,
+        status="active",
+        created_at=now,
+        hazard_count=0,
+    )
 
 
 def get_session(session_id: str) -> Optional[Session]:
@@ -86,13 +92,15 @@ def get_all_sessions() -> list[Session]:
     sessions = []
     for doc in docs:
         data = doc.to_dict() or {}
-        sessions.append(Session(
-            id=doc.id,
-            device_id=data.get("device_id", ""),
-            status=data.get("status", "active"),
-            created_at=data.get("created_at") or datetime.now(timezone.utc),
-            ended_at=data.get("ended_at"),
-            hazard_count=int(data.get("hazard_count", 0)),
-        ))
+        sessions.append(
+            Session(
+                id=doc.id,
+                device_id=data.get("device_id", ""),
+                status=data.get("status", "active"),
+                created_at=data.get("created_at") or datetime.now(timezone.utc),
+                ended_at=data.get("ended_at"),
+                hazard_count=int(data.get("hazard_count", 0)),
+            )
+        )
     sessions.sort(key=lambda s: s.created_at, reverse=True)
     return sessions

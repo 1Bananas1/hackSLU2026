@@ -36,7 +36,7 @@ from ultralytics import YOLO
 # ---------------------------------------------------------------------------
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "best.pt")
 
-CONFIDENCE_THRESHOLD = 0.01       # min per-detection YOLO confidence (normal)
+CONFIDENCE_THRESHOLD = 0.01  # min per-detection YOLO confidence (normal)
 SILENT_CONFIDENCE_THRESHOLD = 0.99  # threshold when system audio is muted
 HAZARD_CLASSES = {  # all pavement distress types worth alerting on
     "pothole",
@@ -330,7 +330,9 @@ def main():
     # --- Volume / mute detection setup ---
     volume_ctrl = _get_volume_controller()
     if volume_ctrl is None:
-        print("[WARN] System volume detection unavailable. Install pycaw for mute-aware thresholding.")
+        print(
+            "[WARN] System volume detection unavailable. Install pycaw for mute-aware thresholding."
+        )
 
     source = args.webcam if args.webcam is not None else args.video
     cap = cv2.VideoCapture(source)
@@ -343,7 +345,9 @@ def main():
     _muted_at_start = _is_muted(volume_ctrl)
     conf_threshold = SILENT_CONFIDENCE_THRESHOLD if _muted_at_start else args.threshold
     if _muted_at_start:
-        print("[INFO] System audio is muted — confidence threshold set to 0.99 (silent mode).")
+        print(
+            "[INFO] System audio is muted — confidence threshold set to 0.99 (silent mode)."
+        )
     frame_skip = args.skip
     window_size = args.window
     debug = args.debug
@@ -390,9 +394,13 @@ def main():
                 if new_threshold != conf_threshold:
                     conf_threshold = new_threshold
                     if muted:
-                        print("[INFO] System audio muted — threshold raised to 0.99 (silent mode).")
+                        print(
+                            "[INFO] System audio muted — threshold raised to 0.99 (silent mode)."
+                        )
                     else:
-                        print(f"[INFO] System audio unmuted — threshold restored to {args.threshold:.2f} (default).")
+                        print(
+                            f"[INFO] System audio unmuted — threshold restored to {args.threshold:.2f} (default)."
+                        )
 
             # YOLO inference (native BGR frame — no conversion needed)
             max_conf, detections = run_inference(model, frame, conf_threshold)
