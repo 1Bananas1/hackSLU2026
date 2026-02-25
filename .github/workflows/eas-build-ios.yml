@@ -53,15 +53,18 @@ jobs:
             --non-interactive \
             --wait \
             --json 2>/dev/null)
-          ARTIFACT_URL=$(echo "$BUILD_JSON" | jq -r '.[0].artifacts.buildUrl')
           BUILD_ID=$(echo "$BUILD_JSON" | jq -r '.[0].id')
-          echo "artifact_url=$ARTIFACT_URL" >> "$GITHUB_OUTPUT"
+          ARTIFACT_URL=$(echo "$BUILD_JSON" | jq -r '.[0].artifacts.buildUrl')
+          INSTALL_URL="https://expo.dev/accounts/imjusthenry/projects/Vigilane/builds/$BUILD_ID"
           echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
+          echo "artifact_url=$ARTIFACT_URL" >> "$GITHUB_OUTPUT"
+          echo "install_url=$INSTALL_URL" >> "$GITHUB_OUTPUT"
 
       - name: Post build summary with QR code
         run: |
+          INSTALL_URL="${{ steps.eas-build.outputs.install_url }}"
           ARTIFACT_URL="${{ steps.eas-build.outputs.artifact_url }}"
-          ENCODED_URL=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$ARTIFACT_URL', safe=''))")
+          ENCODED_URL=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$INSTALL_URL', safe=''))")
           {
             echo "## ✅ iOS Build Complete"
             echo ""
@@ -69,10 +72,13 @@ jobs:
             echo "|---|---|"
             echo "| **Profile** | \`${{ inputs.profile }}\` |"
             echo "| **Platform** | iOS |"
-            echo "| **Direct download** | $ARTIFACT_URL |"
+            echo "| **Install page** | $INSTALL_URL |"
+            echo "| **Direct .ipa** | $ARTIFACT_URL |"
             echo ""
             echo "### Install QR Code"
-            echo "Scan with your iPhone to download the \`.ipa\` directly — no Expo account needed."
+            echo "1. Scan with iPhone using **Safari**"
+            echo "2. Tap the **Install** button on the page that opens"
+            echo "3. Go to **Settings → General → VPN & Device Management** → Trust the certificate"
             echo ""
             echo "![QR Code](https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=$ENCODED_URL)"
           } >> "$GITHUB_STEP_SUMMARY"
