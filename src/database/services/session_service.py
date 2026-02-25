@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 
-from src.database.client import db
+from ..client import db
 
 
 @dataclass
@@ -78,3 +78,21 @@ def end_session(session_id: str) -> None:
     if not doc_ref.get().exists:
         return
     doc_ref.update({"status": "ended", "ended_at": datetime.now(timezone.utc)})
+
+
+def get_all_sessions() -> list[Session]:
+    """Return all sessions, newest first."""
+    docs = db.collection(SESSIONS_COLLECTION).stream()
+    sessions = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        sessions.append(Session(
+            id=doc.id,
+            device_id=data.get("device_id", ""),
+            status=data.get("status", "active"),
+            created_at=data.get("created_at") or datetime.now(timezone.utc),
+            ended_at=data.get("ended_at"),
+            hazard_count=int(data.get("hazard_count", 0)),
+        ))
+    sessions.sort(key=lambda s: s.created_at, reverse=True)
+    return sessions

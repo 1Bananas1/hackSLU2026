@@ -28,7 +28,7 @@ POST /hazards accepts:
 
 from flask import Blueprint, g, jsonify, request
 
-from src.api.middleware.auth import require_auth
+from src.api.auth import require_auth
 from src.database.models.hazard import Hazard
 from src.database.services.hazard_service import (
     delete_hazard,

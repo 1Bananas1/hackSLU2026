@@ -13,9 +13,9 @@
 
 import { addDoc, collection, doc, getDoc, getDocs, increment, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 
-import { auth } from './firebase';
-import { db } from './firebase';
-import type { BoundingBox, Hazard, Settings } from '@/types';
+import { auth, db, storage } from './firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import type { BoundingBox, Hazard, HazardLocation, Settings } from '@/types';
 
 // ---------------------------------------------------------------------------
 // User settings — stored as users/{uid}.settings
@@ -74,6 +74,25 @@ export interface WriteHazardInput {
   labels: string[];
   frameNumber?: number;
   user_uid?: string;
+  photoUri?: string;      // local file:// URI captured at detection time
+  location?: HazardLocation | null;  // GPS coords at time of detection
+}
+
+/**
+ * Upload a local photo URI to Firebase Storage and return the public download URL.
+ * Stored under hazards/{uid}/{timestamp}.jpg
+ */
+export async function uploadHazardPhoto(
+  localUri: string,
+  uid: string,
+  timestamp: number,
+): Promise<string> {
+  const path = `hazards/${uid}/${timestamp}.jpg`;
+  const photoRef = storageRef(storage, path);
+  const response = await fetch(localUri);
+  const blob = await response.blob();
+  await uploadBytes(photoRef, blob, { contentType: 'image/jpeg' });
+  return getDownloadURL(photoRef);
 }
 
 /**
@@ -110,6 +129,7 @@ export async function getUserHazards(): Promise<Hazard[]> {
         timestamp,
         status: data.status ?? 'pending',
         photo_url: data.photo_url ?? null,
+        location: data.location ?? null,
       } as Hazard;
     });
     // Sort newest first in memory (avoids composite index requirement)
@@ -127,16 +147,23 @@ export async function getUserHazards(): Promise<Hazard[]> {
  * user_uid is taken from the currently signed-in Firebase user.
  * Never throws — failures are swallowed so detection never blocks on I/O.
  */
-export async function writeHazard(sessionId: string, input: WriteHazardInput): Promise<void> {
-  if (!sessionId) {
-    console.warn('[firestore] writeHazard skipped: missing sessionId');
-    return;
-  }
-  const { confidence, bboxes, labels, frameNumber = 0, user_uid } = input;
+export async function writeHazard(sessionId: string | null, input: WriteHazardInput): Promise<void> {
+  const { confidence, bboxes, labels, frameNumber = 0, user_uid, photoUri, location } = input;
 
   try {
-    const ref = await addDoc(collection(db, 'hazards'), {
-      session_id: sessionId,
+    // Upload photo first (if captured), then write hazard with URL
+    let photoUrl: string | null = null;
+    if (photoUri && user_uid) {
+      try {
+        photoUrl = await uploadHazardPhoto(photoUri, user_uid, Date.now());
+        console.log('[firestore] photo uploaded:', photoUrl);
+      } catch (uploadErr) {
+        console.warn('[firestore] photo upload failed (continuing without photo):', uploadErr);
+      }
+    }
+
+    const docRef = await addDoc(collection(db, 'hazards'), {
+      session_id: sessionId ?? null,
       user_uid: user_uid ?? null,
       confidence,
       labels,
@@ -144,10 +171,11 @@ export async function writeHazard(sessionId: string, input: WriteHazardInput): P
       frame_number: frameNumber,
       timestamp: serverTimestamp(),
       status: 'pending',
-      photo_url: null,
+      photo_url: photoUrl,
+      location: location ?? null,
     });
 
-    console.log('[firestore] hazard written', ref.id);
+    console.log('[firestore] hazard written', docRef.id);
   } catch (err) {
     console.error('[firestore] writeHazard failed:', err);
   }

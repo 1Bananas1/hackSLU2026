@@ -3,8 +3,16 @@ from .hazard_service import (
     get_hazard,
     get_hazards_by_user,
     get_hazards_by_session,
+    get_all_hazards,
     delete_hazard,
     update_hazard_status,
+)
+from .session_service import (
+    create_session,
+    get_session,
+    end_session,
+    increment_hazard_count,
+    get_all_sessions,
 )
 from .report_service import (
     create_report,
@@ -21,8 +29,15 @@ __all__ = [
     "get_hazard",
     "get_hazards_by_user",
     "get_hazards_by_session",
+    "get_all_hazards",
     "delete_hazard",
     "update_hazard_status",
+    # session
+    "create_session",
+    "get_session",
+    "end_session",
+    "increment_hazard_count",
+    "get_all_sessions",
     # report
     "create_report",
     "get_report",

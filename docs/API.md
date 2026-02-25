@@ -3,7 +3,7 @@
 **Framework:** Flask 3.x (Python)
 **Auth:** Firebase Authentication (ID token verification)
 **Base URL (dev):** `http://127.0.0.1:5000`
-**Entry point:** [`src/api/main.py`](../src/api/main.py)
+**Entry point:** [`src/main.py`](../src/main.py) → [`src/api/__init__.py`](../src/api/__init__.py)
 
 ---
 
@@ -28,7 +28,7 @@ The token is verified server-side via `firebase_admin.auth.verify_id_token()`. O
 | `401` | `{"error": "Invalid token"}` | Malformed or tampered token |
 | `401` | `{"error": "Authentication failed"}` | Any other verification error |
 
-**Implementation:** [`src/api/middleware/auth.py`](../src/api/middleware/auth.py) — `require_auth` decorator
+**Implementation:** [`src/api/auth.py`](../src/api/auth.py) — `require_auth` decorator
 
 ---
 
@@ -238,16 +238,16 @@ Submit a formal city report for a detected hazard. Any authenticated user may re
 
 ```bash
 # From repo root, with .venv active:
-python -m src.api.main
+python -m src.main
 
 # Or via Flask CLI:
-flask --app src.api.main:app run --debug
+flask --app src.main:app run --debug
 ```
 
-Required `src/.env` variables:
+Required `.env` variables:
 
 ```
-FIREBASE_KEY_PATH=../serviceAccountKey.json
+FIREBASE_KEY_PATH=serviceAccountKey.json
 FIREBASE_STORAGE_BUCKET=your-project.appspot.com
 ENCRYPTION_KEY=<output of Fernet.generate_key()>
 ```
@@ -258,13 +258,11 @@ ENCRYPTION_KEY=<output of Fernet.generate_key()>
 
 ```
 src/api/
-├── main.py              create_app() factory + GET / health check (entry point)
-├── middleware/
-│   └── auth.py          require_auth decorator (Firebase token verification)
-├── routes/
-│   ├── __init__.py      register_routes() — wires blueprints onto the app
-│   ├── hazards.py       POST/GET/DELETE /hazards, POST /hazards/<id>/dismiss,
-│   │                    POST /hazards/<id>/report
-│   └── sessions.py      session management endpoints
-└── services/            business logic layer (hazard, report, session, storage, user, encryption)
+├── __init__.py          create_app() factory + GET / health check
+├── auth.py              require_auth decorator (Firebase token verification)
+├── requirements.txt     flask, firebase-admin, python-dotenv, cryptography
+└── routes/
+    ├── __init__.py      register_routes() — wires blueprints onto the app
+    └── hazards.py       POST/GET/DELETE /hazards, POST /hazards/<id>/dismiss,
+                         POST /hazards/<id>/report
 ```

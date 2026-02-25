@@ -76,6 +76,14 @@ def delete_hazard(hazard_id: str) -> None:
     db.collection(COLLECTION).document(hazard_id).delete()
 
 
+def get_all_hazards() -> List[Hazard]:
+    """Return all hazards across all users, newest first."""
+    docs = db.collection(COLLECTION).stream()
+    hazards = [Hazard.from_dict(doc.to_dict(), doc.id) for doc in docs]
+    hazards.sort(key=lambda h: h.timestamp or datetime.min, reverse=True)
+    return hazards
+
+
 def update_hazard_status(hazard_id: str, status: str) -> None:
     """
     Update the status field of a hazard document.

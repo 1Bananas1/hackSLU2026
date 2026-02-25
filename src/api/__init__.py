@@ -1,11 +1,5 @@
 """
-Flask application entry point for the HackSLU2026 backend API.
-
-Run from the repo root:
-    python -m src.api.main
-
-Or with Flask dev server:
-    flask --app src.api.main:app run --debug
+Flask application factory for the HackSLU2026 backend API.
 """
 
 import os
@@ -20,7 +14,7 @@ except ModuleNotFoundError:  # pragma: no cover
 from src.database.config import initialize_firebase
 from src.database.services.encryption import validate_encryption_key
 
-from src.api.routes import register_routes
+from .routes import register_routes
 
 
 def create_app() -> Flask:
@@ -49,9 +43,3 @@ def create_app() -> Flask:
         return response
 
     return app
-
-
-app = create_app()
-
-if __name__ == "__main__":
-    app.run(debug=True, host='0.0.0.0', port=5000)
