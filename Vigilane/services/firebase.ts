@@ -2,8 +2,9 @@
  * Firebase Web SDK initialisation for Expo (native + web).
  *
  * Note:
- * - firebase@11.x does NOT provide `firebase/auth/react-native`.
- * - On native we initialize auth without custom persistence (works in Expo dev client).
+ * - firebase@11.x does NOT provide `firebase/auth/react-native` as a module path,
+ *   but getReactNativePersistence is still available via require('firebase/auth').
+ * - On native we use AsyncStorage for persistence so auth survives app restarts.
  * - On web we use indexedDBLocalPersistence so refresh keeps the session.
  */
 
@@ -51,7 +52,18 @@ function initAuth(): Auth {
     });
   }
 
-  // iOS/Android, or server-side rendering on Node.js
+  if (isBrowser) {
+    // Native iOS/Android — persist auth state across app restarts via AsyncStorage.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getReactNativePersistence } = require('firebase/auth');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    return initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  }
+
+  // Server-side rendering on Node.js — no persistence
   return initializeAuth(app);
 }
 

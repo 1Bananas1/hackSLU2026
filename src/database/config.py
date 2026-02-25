@@ -23,8 +23,8 @@ except ModuleNotFoundError:  # pragma: no cover
     load_dotenv = None
 
 if load_dotenv:
-    load_dotenv(PROJECT_ROOT / ".env")
-    load_dotenv()
+    load_dotenv(PROJECT_ROOT / "Vigilane" / ".env")
+    load_dotenv()  # CWD fallback
 
 
 def initialize_firebase() -> None:
