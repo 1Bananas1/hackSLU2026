@@ -10,10 +10,11 @@
 ## Collections Overview
 
 | Collection | Purpose | Document model |
-|------------|---------|---------------|
-| `users`    | One per Firebase Auth user; created/updated on every sign-in | [user_service.py](src/database/services/user_service.py) |
-| `hazards`  | One per detected road hazard event | [Hazard](src/database/models/hazard.py) |
-| `reports`  | One per formal city report submitted for a hazard | [Report](src/database/models/report.py) |
+| ---------- | ------- | -------------- |
+| `users` | One per Firebase Auth user; created/updated on every sign-in | [user_service.py](src/database/services/user_service.py) |
+| `hazards` | One per detected road hazard event | [Hazard](src/database/models/hazard.py) |
+| `sessions` | One per detection session (device/dashcam run) | [session_service.py](src/database/services/session_service.py) |
+| `reports` | One per formal city report submitted for a hazard | [Report](src/database/models/report.py) |
 
 Collections are flat (no sub-collections). Hazards are owned by a Firebase Auth user via `user_uid`. Reports reference their parent hazard via `hazard_id`.
 

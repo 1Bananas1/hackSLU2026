@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
+
+HAZARD_TTL_HOURS = 24
 
 
 @dataclass
@@ -20,6 +22,9 @@ class Hazard:
     photo_url: Optional[str] = None
     location: Optional[Dict[str, float]] = None  # {"lat": ..., "lng": ...}
     status: str = "pending"  # "pending" | "reported" | "dismissed"
+    expires_at: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc) + timedelta(hours=HAZARD_TTL_HOURS)
+    )
     id: Optional[str] = None  # populated after Firestore write
 
     def __post_init__(self) -> None:
@@ -39,6 +44,7 @@ class Hazard:
             "photo_url": self.photo_url,
             "location": self.location,
             "status": self.status,
+            "expires_at": self.expires_at,
         }
 
     @classmethod
@@ -58,5 +64,9 @@ class Hazard:
             photo_url=data.get("photo_url"),
             location=data.get("location"),
             status=data.get("status", "pending"),
+            expires_at=data.get(
+                "expires_at",
+                datetime.now(timezone.utc) + timedelta(hours=HAZARD_TTL_HOURS),
+            ),
             id=doc_id,
         )

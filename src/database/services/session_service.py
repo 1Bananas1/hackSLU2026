@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
+
+SESSION_TTL_HOURS = 24
 
 from ..client import db
 
@@ -15,6 +17,7 @@ class Session:
     created_at: datetime = datetime.now(timezone.utc)
     ended_at: Optional[datetime] = None
     hazard_count: int = 0
+    expires_at: datetime = datetime.now(timezone.utc)
 
 
 SESSIONS_COLLECTION = "sessions"
@@ -26,12 +29,14 @@ def create_session(device_id: str) -> Session:
     """
     doc_ref = db.collection(SESSIONS_COLLECTION).document()
     now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(hours=SESSION_TTL_HOURS)
     data = {
         "device_id": device_id,
         "status": "active",
         "created_at": now,
         "ended_at": None,
         "hazard_count": 0,
+        "expires_at": expires_at,
     }
     doc_ref.set(data)
     return Session(
@@ -40,6 +45,7 @@ def create_session(device_id: str) -> Session:
         status="active",
         created_at=now,
         hazard_count=0,
+        expires_at=expires_at,
     )
 
 
@@ -59,6 +65,7 @@ def get_session(session_id: str) -> Optional[Session]:
         created_at=data.get("created_at") or datetime.now(timezone.utc),
         ended_at=data.get("ended_at"),
         hazard_count=int(data.get("hazard_count", 0)),
+        expires_at=data.get("expires_at") or datetime.now(timezone.utc),
     )
 
 
@@ -100,6 +107,7 @@ def get_all_sessions() -> list[Session]:
                 created_at=data.get("created_at") or datetime.now(timezone.utc),
                 ended_at=data.get("ended_at"),
                 hazard_count=int(data.get("hazard_count", 0)),
+                expires_at=data.get("expires_at") or datetime.now(timezone.utc),
             )
         )
     sessions.sort(key=lambda s: s.created_at, reverse=True)
