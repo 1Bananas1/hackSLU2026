@@ -34,7 +34,7 @@ Vigilane is an AI-powered road hazard detection system. A YOLOv8 model processes
 Vigilane/
 ├── Vigilane/                  # React Native / Expo mobile app
 │   ├── app/                   # Expo Router (login.tsx, hazardDetails.tsx, (tabs)/)
-│   ├── components/            # Shared UI components
+│   ├── components/            # Shared UI (MapModal, Toast, themed components)
 │   ├── context/               # AuthContext (Firebase auth state)
 │   ├── hooks/                 # TFLite + camera hooks
 │   ├── services/              # Firebase, API, Firestore clients
@@ -42,9 +42,11 @@ Vigilane/
 │   ├── types/                 # Shared TypeScript interfaces
 │   └── web-stubs/             # Web polyfills for native-only packages
 ├── src/
-│   ├── api/                   # Flask application
-│   │   ├── main.py            # App factory + health endpoint (entry point)
-│   │   ├── middleware/        # @require_auth decorator (Firebase token verification)
+│   ├── main.py                # Entry point: python -m src.main (structured server)
+│   ├── flask_server.py        # Standalone Flask server (used by tests, no auth)
+│   ├── api/                   # Flask application factory (structured server)
+│   │   ├── __init__.py        # create_app() factory + health endpoint
+│   │   ├── auth.py            # @require_auth decorator (Firebase token verification)
 │   │   ├── routes/            # Blueprints: hazards.py, sessions.py
 │   ├── database/              # Firestore models, services, seed scripts
 │   │   ├── config.py          # Firebase Admin SDK initialization
@@ -96,11 +98,11 @@ cd Vigilane
 1. Go to [Firebase Console](https://console.firebase.google.com) → Project Settings → Service accounts.
 2. Click **Generate new private key** and save as `serviceAccountKey.json` in the repo root.
 
-Create `src/.env`:
+Create `src/.env` (copy from `src/.env.example`):
 
 ```dotenv
-FIREBASE_KEY_PATH=../serviceAccountKey.json
-FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+# Path to serviceAccountKey.json — relative to repo root when using python -m src.main
+FIREBASE_KEY_PATH=serviceAccountKey.json
 
 # Required for POST /hazards/<id>/report — encrypts reporter PII before Firestore storage
 # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -112,21 +114,16 @@ ENCRYPTION_KEY=<your-fernet-key>
 
 ### 2b — Frontend environment variables
 
-Create `Vigilane/.env.local` (never commit this file):
+Create `Vigilane/.env` by copying `Vigilane/.env.example` (never commit the filled-in file):
 
 ```dotenv
 # Firebase web config — Firebase Console → Project Settings → Your apps → Web app
-EXPO_PUBLIC_FIREBASE_API_KEY=
-EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=
-EXPO_PUBLIC_FIREBASE_PROJECT_ID=
-EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=
-EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
-EXPO_PUBLIC_FIREBASE_APP_ID=
-
-# Google OAuth 2.0 client IDs — Google Cloud Console → APIs & Services → Credentials
-EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=        # Web client — used everywhere
-EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=    # Android client — required for dev/prod builds
-EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=        # iOS client — optional
+EXPO_PUBLIC_FIREBASE_API_KEY=your-web-api-key
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project-id.firebaseapp.com
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project-id.appspot.com
+EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=000000000000
+EXPO_PUBLIC_FIREBASE_APP_ID=1:000000000000:web:xxxx
 
 # Backend URL — use your machine's LAN IP when testing on a physical device
 # Defaults: http://10.0.2.2:5000 (Android emulator) / http://127.0.0.1:5000 (iOS sim)
@@ -146,8 +143,8 @@ python -m venv .venv
 # Install dependencies
 pip install -r src/requirements.txt
 
-# Start the Flask server
-python -m src.api.main
+# Start the Flask server (structured, with Firebase auth)
+python -m src.main
 ```
 
 The server starts on `http://0.0.0.0:5000`.
@@ -157,8 +154,17 @@ The server starts on `http://0.0.0.0:5000`.
 Alternatively via Flask CLI:
 
 ```bash
-flask --app src.api.main:app run --debug
+flask --app src.main:app run --debug
 ```
+
+### Standalone server (no Firebase auth, used by tests)
+
+```bash
+cd src
+python flask_server.py
+```
+
+This runs the simpler `src/flask_server.py` server, which skips Firebase token verification and is what `tests/test_flask_server_routes.py` tests against.
 
 ---
 
@@ -186,7 +192,7 @@ Key flags:
 |---|---|---|
 | `--webcam N` | — | Use webcam index N |
 | `--video PATH` | — | Use a video file |
-| `--threshold F` | `0.12` | Minimum YOLO confidence to count a frame |
+| `--threshold F` | `0.01` | Minimum YOLO confidence to count a frame |
 | `--no-display` | off | Disable OpenCV window (headless mode) |
 | `--no-voice` | off | Disable voice confirmation prompt |
 | `--api-url URL` | — | Flask backend URL for auto-reporting |
@@ -194,7 +200,7 @@ Key flags:
 
 Detection algorithm:
 - **Sliding window** — 3 consecutive frames; alert fires if ≥34% contain detections above threshold
-- **ROI filtering** — top 55% (sky) and bottom 12% (car hood) of each frame are ignored
+- **ROI filtering** — top 1% (sky) and bottom 8% (car hood) of each frame are ignored
 - **Alert cooldown** — minimum 30 frames between consecutive alerts
 - **Voice confirmation** — optional two-turn TTS + STT loop before a detection is reported
 
@@ -255,11 +261,11 @@ EXPO_PUBLIC_API_BASE_URL=http://192.168.x.x:5000
 
 ## Environment summary
 
-| File | Location | Committed? |
-|---|---|---|
-| `serviceAccountKey.json` | repo root | No |
-| `src/.env` | `src/` | No |
-| `Vigilane/.env.local` | `Vigilane/` | No |
+| File | Location | Committed? | Template |
+| --- | --- | --- | --- |
+| `serviceAccountKey.json` | repo root | No | — (download from Firebase Console) |
+| `src/.env` | `src/` | No | `src/.env.example` |
+| `Vigilane/.env` | `Vigilane/` | No | `Vigilane/.env.example` |
 
 All three files are listed in `.gitignore` and must be created locally after cloning.
 
